@@ -1,7 +1,16 @@
-import {withSentryConfig} from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs"
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@workspace/ui"],
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/conversations",
+        permanent: false,
+      },
+    ]
+  },
 }
 
 export default withSentryConfig(nextConfig, {
@@ -35,4 +44,4 @@ export default withSentryConfig(nextConfig, {
   // https://docs.sentry.io/product/crons/
   // https://vercel.com/docs/cron-jobs
   automaticVercelMonitors: true,
-});
+})
