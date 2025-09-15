@@ -29,6 +29,20 @@ export const enhanceResponse = action({
       })
     }
 
+    const subscriptions = await ctx.runQuery(
+      internal.system.subscriptions.getByOrganizationId,
+      {
+        organizationId: orgId,
+      }
+    )
+
+    if (subscriptions?.status !== "active") {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "Organization does not have an active subscription",
+      })
+    }
+
     const response = await generateText({
       model: google("gemini-1.5-flash"),
       messages: [

@@ -12,6 +12,7 @@ import { extractTextContent } from "../lib/extractTextContent"
 import rag from "../system/ai/rag"
 import { Id } from "../_generated/dataModel"
 import { paginationOptsValidator } from "convex/server"
+import { internal } from "../_generated/api"
 
 const guessMimeType = (filename: string, bytes: ArrayBuffer): string => {
   return (
@@ -42,6 +43,20 @@ export const addFile = action({
       throw new ConvexError({
         code: "UNAUTHORIZED",
         message: "User not authorized",
+      })
+    }
+
+    const subscriptions = await ctx.runQuery(
+      internal.system.subscriptions.getByOrganizationId,
+      {
+        organizationId: orgId,
+      }
+    )
+
+    if (subscriptions?.status !== "active") {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "Organization does not have an active subscription",
       })
     }
 
