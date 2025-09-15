@@ -10,25 +10,27 @@ This project is a monorepo managed with PNPM workspaces and Turborepo, containin
 
 - `apps/web`: Dashboard web application for organizations to manage customer interactions
 - `apps/widget`: Embeddable widget for customer-facing websites
+- `apps/embed`: Script to embed the widget into external websites
 
 ### Packages
 
 - `packages/backend`: Convex backend with database schema and AI agent configuration
 - `packages/ui`: Shared UI components library built with Radix UI
-- `packages/math`: Utility math functions
 - `packages/typescript-config`: Shared TypeScript configurations
 - `packages/eslint-config`: Shared ESLint configurations
+- `packages/math`: Utility math functions
 
 ## Tech Stack
 
 ### Frontend
 
-- **Framework**: Next.js 15.4
+- **Framework**: Next.js 15
 - **UI**: Shadcn UI components
 - **State Management**: Jotai atoms for state management
 - **Form Handling**: React Hook Form with Zod validation
 - **Authentication**: Clerk for authentication and organization management
 - **Styling**: Tailwind CSS
+- **Notifications**: Sonner for toast notifications
 
 ### Backend
 
@@ -53,6 +55,7 @@ This project is a monorepo managed with PNPM workspaces and Turborepo, containin
 - Customizable greetings and suggested questions
 - Session management for persistent conversations
 - Responsive design for all devices
+- Easy integration through simple code snippets
 
 ### Admin Dashboard
 
@@ -61,6 +64,14 @@ This project is a monorepo managed with PNPM workspaces and Turborepo, containin
 - Custom widget configuration
 - File upload for knowledge base building
 - User authentication and role management
+- Integration management with copy-and-paste snippets
+
+### Integrations
+
+- Multiple integration options for different platforms
+- Copy-paste script integration
+- Organization-specific widget configurations
+- Simple deployment process for web environments
 
 ### Data Architecture
 
@@ -68,6 +79,37 @@ This project is a monorepo managed with PNPM workspaces and Turborepo, containin
 - Contact session management with metadata
 - Organization-specific configurations
 - Subscription management
+
+## Future Planned Features
+
+### Advanced AI Capabilities
+
+- Sentiment analysis for identifying frustrated customers
+- Multi-language support with automatic translation
+- Voice/audio message support in chat widget
+
+### Enhanced Widget Features
+
+- Rich media support (images, documents)
+- Typing indicators for better user experience
+- Advanced theme customization
+- Widget position control options
+
+### Knowledge Management
+
+- Knowledge base editor with rich text support
+- Document categorization system
+- Knowledge base usage analytics
+- Auto-summarization of long documents
+
+### Admin Tools
+
+- Role-based access control
+- Conversation templates for common scenarios
+- CRM system integrations
+- A/B testing for widget configurations
+- Export/import functionality for data management
+- Automated conversation triggers based on user behavior
 
 ## Development
 
@@ -87,6 +129,10 @@ cp .env.local.example .env.local
 
 # Run development servers
 turbo dev
-```
 
-The web dashboard will be available at `http://localhost:3000` and the widget at `http://localhost:3001`.
+# For Deployment -
+- Deploy apps/web and apps/widget
+- Run this script `VITE_WIDGET_URL="YOUR_WIDGET_HOSTED_URL" pnpm build`
+- Rename & place `widget.js` inside apps/widget/public folder (from apps/embed/dist/widget.iife.js)
+- Also update the constants.ts file apps/web/modules/integrations/constants.ts with "YOUR_WIDGET_HOSTED_URL"
+```
