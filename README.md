@@ -1,138 +1,106 @@
-# Verto AI – Transformative AI for Customer Support
+# Verto AI – AI Customer Support SaaS
 
-A modern AI-powered customer support platform built with Next.js, Convex, and the latest AI technologies. This platform provides organizations with an intelligent chatbot that can search through knowledge bases, escalate to human agents when needed, and effectively manage customer conversations.
+Verto AI is a multi-tenant AI-powered customer support platform that enables
+businesses to deploy an intelligent chatbot trained on their own knowledge base,
+manage conversations, and escalate complex issues to human agents.
 
-## Project Structure
+Built for SaaS products, e-commerce stores, and service businesses.
 
-This project is a monorepo managed with PNPM workspaces and Turborepo, containing:
+---
 
-### Applications
+## 🚀 Features
 
-- `apps/web`: Dashboard web application for organizations to manage customer interactions
-- `apps/widget`: Embeddable widget for customer-facing websites
-- `apps/embed`: Script to embed the widget into external websites
-
-### Packages
-
-- `packages/backend`: Convex backend with database schema and AI agent configuration
-- `packages/ui`: Shared UI components library built with Radix UI
-- `packages/typescript-config`: Shared TypeScript configurations
-- `packages/eslint-config`: Shared ESLint configurations
-- `packages/math`: Utility math functions
-
-## Tech Stack
-
-### Frontend
-
-- **Framework**: Next.js 15
-- **UI**: Shadcn UI components
-- **State Management**: Jotai atoms for state management
-- **Form Handling**: React Hook Form with Zod validation
-- **Authentication**: Clerk for authentication and organization management
-- **Styling**: Tailwind CSS
-- **Notifications**: Sonner for toast notifications
-
-### Backend
-
-- **Database & Backend**: Convex for real-time database and serverless functions
-- **AI Integration**: Google Gemini 2.5 via AI SDK
-- **RAG Support**: Convex RAG for knowledge retrieval
-- **Agent Framework**: Convex Agent for structured conversation management
-- **Error Monitoring**: Sentry for error tracking and performance monitoring
-
-## Key Features
-
-### AI-Powered Support
-
-- Intelligent support agent built on Google Gemini 2.5
-- Knowledge base search for accurate responses
-- Automatic escalation to human agents when needed
+- AI-powered chat using Google Gemini
+- Knowledge base ingestion (documents → embeddings)
 - Context-aware conversations
-
-### Customer Widget
-
-- Embeddable chat widget for websites
-- Customizable greetings and suggested questions
-- Session management for persistent conversations
-- Responsive design for all devices
-- Easy integration through simple code snippets
-
-### Admin Dashboard
-
+- Automatic human escalation
+- Embeddable website chat widget
 - Organization-based multi-tenancy
-- Conversation management (view, resolve, escalate)
-- Custom widget configuration
-- File upload for knowledge base building
-- User authentication and role management
-- Integration management with copy-and-paste snippets
+- Admin dashboard for managing conversations
+- Customizable widget appearance
+- Script-based integration
+- Session persistence
 
-### Integrations
+---
 
-- Multiple integration options for different platforms
-- Copy-paste script integration
-- Organization-specific widget configurations
-- Simple deployment process for web environments
+## 🧱 Tech Stack
 
-### Data Architecture
+Frontend:
+- Next.js 15
+- Tailwind CSS
+- Shadcn UI
+- React Hook Form + Zod
+- Jotai
 
-- Structured conversations and message storage
-- Contact session management with metadata
-- Organization-specific configurations
-- Subscription management
+Backend:
+- Convex (DB + serverless)
+- Convex RAG
+- Convex Agent
+- Google Gemini (AI SDK)
 
-## Future Planned Features
+Auth:
+- Clerk
 
-### Advanced AI Capabilities
+Monitoring:
+- Sentry
 
-- Sentiment analysis for identifying frustrated customers
-- Multi-language support with automatic translation
-- Voice/audio message support in chat widget
+---
 
-### Enhanced Widget Features
+## 🏗 Architecture
 
-- Rich media support (images, documents)
-- Typing indicators for better user experience
-- Advanced theme customization
-- Widget position control options
+Monorepo (PNPM + Turborepo)
 
-### Knowledge Management
+apps/
+- web → Admin Dashboard  
+- widget → Customer Chat Widget  
+- embed → Script loader  
 
-- Knowledge base editor with rich text support
-- Document categorization system
-- Knowledge base usage analytics
-- Auto-summarization of long documents
+packages/
+- backend → Convex schema & AI logic  
+- ui → Shared components  
+- typescript-config  
+- eslint-config  
 
-### Admin Tools
+---
 
-- Role-based access control
-- Conversation templates for common scenarios
-- CRM system integrations
-- A/B testing for widget configurations
-- Export/import functionality for data management
-- Automated conversation triggers based on user behavior
+## 🔁 How It Works
 
-## Development
+1. Admin uploads documents  
+2. Documents converted to embeddings  
+3. User asks question in widget  
+4. AI searches knowledge base  
+5. AI generates response  
+6. Escalate to human if needed  
 
-### Requirements
+---
 
-- Node.js 20 or higher
-- PNPM 10.4.1 or higher
+## 🌐 Live Demo
 
-### Setup
+https://verto-ai-web.vercel.app/
 
-```bash
-# Install dependencies
-pnpm install
+---
 
-# Set up environment variables
-cp .env.local.example .env.local
+## ⚙️ Local Setup
 
-# Run development servers
-turbo dev
+Node 20+
 
-# For Deployment -
-- Deploy apps/web and apps/widget
-- Run this script `VITE_WIDGET_URL="YOUR_WIDGET_HOSTED_URL" pnpm build`
-- Rename & place `widget.js` inside apps/widget/public folder (from apps/embed/dist/widget.iife.js)
-- Also update the constants.ts file apps/web/modules/integrations/constants.ts with "YOUR_WIDGET_HOSTED_URL"
-```
+pnpm install  
+pnpm dev  
+
+---
+
+## 📌 Use Case
+
+This project is designed as a reusable starter kit to build:
+
+- AI customer support systems  
+- Internal AI assistants  
+- AI chatbots for websites  
+
+---
+
+## 👤 Author
+
+Aarush Tanwar  
+https://aaruush.vercel.app/  
+https://github.com/Thisisaarush
