@@ -4,6 +4,8 @@ import { supportAgent } from "../system/ai/agents/supportAgent"
 import { MessageDoc, saveMessage } from "@convex-dev/agent"
 import { components, internal } from "../_generated/api"
 import { paginationOptsValidator } from "convex/server"
+import { logger, createLogContext } from "../lib/logger"
+import { enforceRateLimit, getIdentifier, RATE_LIMITS } from "../lib/rateLimit"
 
 export const getMany = query({
   args: {
@@ -22,32 +24,46 @@ export const getMany = query({
     const conversations = await ctx.db
       .query("conversations")
       .withIndex("by_contact_session_id", (q) =>
-        q.eq("contactSessionId", args.contactSessionId)
+        q.eq("contactSessionId", args.contactSessionId),
       )
       .order("desc")
       .paginate(args.paginationOpts)
 
-    const conversationWithLastMessage = await Promise.all(
-      conversations.page.map(async (conversation) => {
-        let lastMessage: MessageDoc | null = null
-        const messages = await supportAgent.listMessages(ctx, {
-          threadId: conversation.threadId,
-          paginationOpts: { numItems: 1, cursor: null },
-        })
+    // OPTIMIZATION: Batch fetch last messages for all conversations
+    // Instead of N+1 queries, we fetch all thread IDs and query messages in parallel
+    const threadIds = conversations.page.map((c) => c.threadId)
 
-        if (messages.page.length > 0) {
-          lastMessage = messages.page[0] ?? null
-        }
+    // Parallel fetch of last messages for all threads
+    const lastMessagesMap = new Map<string, MessageDoc | null>()
 
-        return {
-          _id: conversation._id,
-          _creationTime: conversation._creationTime,
-          status: conversation.status,
-          organizationId: conversation.organizationId,
-          threadId: conversation.threadId,
-          lastMessage,
+    await Promise.all(
+      threadIds.map(async (threadId) => {
+        try {
+          const messages = await supportAgent.listMessages(ctx, {
+            threadId,
+            paginationOpts: { numItems: 1, cursor: null },
+          })
+          lastMessagesMap.set(threadId, messages.page[0] ?? null)
+        } catch (error) {
+          logger.warn("Failed to fetch last message", {
+            conversationId: threadId,
+          })
+          lastMessagesMap.set(threadId, null)
         }
-      })
+      }),
+    )
+
+    const conversationWithLastMessage = conversations.page.map(
+      (conversation) => ({
+        _id: conversation._id,
+        _creationTime: conversation._creationTime,
+        status: conversation.status,
+        organizationId: conversation.organizationId,
+        threadId: conversation.threadId,
+        tags: conversation.tags,
+        priority: conversation.priority,
+        lastMessage: lastMessagesMap.get(conversation.threadId) ?? null,
+      }),
     )
 
     return {
@@ -94,6 +110,12 @@ export const create = mutation({
     contactSessionId: v.id("contactSessions"),
   },
   handler: async (ctx, args) => {
+    // Rate limiting
+    enforceRateLimit(
+      getIdentifier("conversationCreate", args.contactSessionId),
+      RATE_LIMITS.conversationCreate,
+    )
+
     const session = await ctx.db.get(args.contactSessionId)
 
     if (!session || (session.expiresAt && session.expiresAt < Date.now())) {
@@ -115,7 +137,7 @@ export const create = mutation({
     const widgetSettings = await ctx.db
       .query("widgetSettings")
       .withIndex("by_organization_id", (q) =>
-        q.eq("organizationId", args.organizationId)
+        q.eq("organizationId", args.organizationId),
       )
       .unique()
 

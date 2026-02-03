@@ -7,6 +7,13 @@ import { resolveConversation } from "../system/ai/tools/resolveConversation"
 import { escalateConversation } from "../system/ai/tools/escalateConversation"
 import { saveMessage } from "@convex-dev/agent"
 import { search } from "../system/ai/tools/search"
+import {
+  enforceRateLimit,
+  getIdentifier,
+  RATE_LIMITS,
+  sanitizeInput,
+  validateInputLength,
+} from "../lib/rateLimit"
 
 export const create = action({
   args: {
@@ -15,11 +22,28 @@ export const create = action({
     contactSessionId: v.id("contactSessions"),
   },
   handler: async (ctx, args) => {
+    // Rate limiting
+    enforceRateLimit(
+      getIdentifier("messageCreate", args.contactSessionId),
+      RATE_LIMITS.messageCreate,
+    )
+
+    // Input validation
+    if (!validateInputLength(args.prompt, "message")) {
+      throw new ConvexError({
+        message: "Message too long or empty",
+        code: "INVALID_INPUT",
+      })
+    }
+
+    // Sanitize input
+    const sanitizedPrompt = sanitizeInput(args.prompt)
+
     const contactSession = await ctx.runQuery(
       internal.system.contactSessions.getOne,
       {
         contactSessionId: args.contactSessionId,
-      }
+      },
     )
 
     if (
@@ -36,7 +60,7 @@ export const create = action({
       internal.system.conversations.getByThreadId,
       {
         threadId: args.threadId,
-      }
+      },
     )
 
     if (!conversation) {
@@ -63,7 +87,7 @@ export const create = action({
       internal.system.subscriptions.getByOrganizationId,
       {
         organizationId: conversation.organizationId,
-      }
+      },
     )
 
     const shouldTriggerAgent =
@@ -76,14 +100,14 @@ export const create = action({
           threadId: args.threadId,
         },
         {
-          prompt: args.prompt,
+          prompt: sanitizedPrompt,
           tools: { escalateConversation, resolveConversation, search },
-        }
+        },
       )
     } else {
       await saveMessage(ctx, components.agent, {
         threadId: args.threadId,
-        prompt: args.prompt,
+        prompt: sanitizedPrompt,
       })
     }
   },

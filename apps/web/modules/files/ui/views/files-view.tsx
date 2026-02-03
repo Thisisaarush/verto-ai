@@ -36,7 +36,7 @@ export const FilesView = () => {
   const files = usePaginatedQuery(
     api.private.files.list,
     {},
-    { initialNumItems: 10 }
+    { initialNumItems: 10 },
   )
 
   const {
@@ -78,7 +78,7 @@ export const FilesView = () => {
         onFileUploaded={() => {}}
       />
 
-      <div className="flex min-h-screen flex-col bg-muted p-8">
+      <div className="h-full flex flex-col bg-muted overflow-auto p-8">
         <div className="mx-auto w-full max-w-screen-md">
           <div className="space-y-2">
             <h1 className="text-2xl md:text-4xl">Knowledge Base</h1>

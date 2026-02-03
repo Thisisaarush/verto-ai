@@ -11,7 +11,7 @@ export const updateStatus = mutation({
     status: v.union(
       v.literal("unresolved"),
       v.literal("escalated"),
-      v.literal("resolved")
+      v.literal("resolved"),
     ),
   },
   handler: async (ctx, args) => {
@@ -46,8 +46,61 @@ export const updateStatus = mutation({
       })
     }
 
-    await ctx.db.patch(args.conversationId, {
+    // Track timestamps for escalation/resolution
+    const updates: Partial<Doc<"conversations">> = {
       status: args.status,
+    }
+
+    if (args.status === "escalated" && !conversation.escalatedAt) {
+      updates.escalatedAt = Date.now()
+    }
+    if (args.status === "resolved" && !conversation.resolvedAt) {
+      updates.resolvedAt = Date.now()
+    }
+
+    await ctx.db.patch(args.conversationId, updates)
+  },
+})
+
+export const updatePriority = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    priority: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      })
+    }
+
+    const orgId = identity.orgId as string
+    if (!orgId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authorized",
+      })
+    }
+
+    const conversation = await ctx.db.get(args.conversationId)
+    if (!conversation) {
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Conversation not found",
+      })
+    }
+
+    if (conversation.organizationId !== orgId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authorized",
+      })
+    }
+
+    await ctx.db.patch(args.conversationId, {
+      priority: args.priority,
     })
   },
 })
@@ -110,9 +163,13 @@ export const getMany = query({
       v.union(
         v.literal("unresolved"),
         v.literal("escalated"),
-        v.literal("resolved")
-      )
+        v.literal("resolved"),
+      ),
     ),
+    priority: v.optional(
+      v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    ),
+    tag: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -139,7 +196,7 @@ export const getMany = query({
         .withIndex("by_status_and_organization_id", (q) =>
           q
             .eq("status", args.status as Doc<"conversations">["status"])
-            .eq("organizationId", orgId)
+            .eq("organizationId", orgId),
         )
         .order("desc")
         .paginate(args.paginationOpts)
@@ -149,6 +206,27 @@ export const getMany = query({
         .withIndex("by_organization_id", (q) => q.eq("organizationId", orgId))
         .order("desc")
         .paginate(args.paginationOpts)
+    }
+
+    // Apply priority filter in-memory (Convex doesn't support multiple index filters)
+    let filteredPage = conversations.page
+    if (args.priority) {
+      filteredPage = filteredPage.filter(
+        (conv) => conv.priority === args.priority,
+      )
+    }
+
+    // Apply tag filter in-memory
+    if (args.tag) {
+      filteredPage = filteredPage.filter((conv) =>
+        conv.tags?.includes(args.tag as string),
+      )
+    }
+
+    // Update conversations object with filtered page
+    conversations = {
+      ...conversations,
+      page: filteredPage,
     }
 
     const conversationsWithAdditionalData = await Promise.all(
@@ -172,11 +250,11 @@ export const getMany = query({
           lastMessage,
           contactSession,
         }
-      })
+      }),
     )
 
     const validConversations = conversationsWithAdditionalData.filter(
-      (conv): conv is NonNullable<typeof conv> => conv !== null
+      (conv): conv is NonNullable<typeof conv> => conv !== null,
     )
 
     return {

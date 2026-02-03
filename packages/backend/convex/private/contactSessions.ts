@@ -1,6 +1,22 @@
 import { query } from "../_generated/server"
 import { ConvexError, v } from "convex/values"
 
+export const getOne = query({
+  args: { contactSessionId: v.id("contactSessions") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      })
+    }
+
+    const contactSession = await ctx.db.get(args.contactSessionId)
+    return contactSession
+  },
+})
+
 export const getOneByConversationId = query({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {

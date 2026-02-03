@@ -4,6 +4,7 @@ import { Webhook } from "svix"
 import { createClerkClient } from "@clerk/backend"
 import type { WebhookEvent } from "@clerk/backend"
 import { internal } from "./_generated/api"
+import { checkRateLimit, RATE_LIMITS, getIdentifier } from "./lib/rateLimit"
 
 const clerkClient = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY || "",
@@ -15,6 +16,36 @@ http.route({
   path: "/clerk-webhook",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
+    // Rate limiting for webhook
+    const ip =
+      req.headers.get("x-forwarded-for") ||
+      req.headers.get("x-real-ip") ||
+      "unknown"
+    const rateLimitResult = checkRateLimit(
+      getIdentifier("webhook", undefined, ip),
+      RATE_LIMITS.webhook,
+    )
+
+    if (!rateLimitResult.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: "Too many requests",
+          retryAfter: Math.ceil(
+            (rateLimitResult.resetTime - Date.now()) / 1000,
+          ),
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": String(
+              Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000),
+            ),
+          },
+        },
+      )
+    }
+
     const event = await validateRequest(req)
     if (!event) {
       return new Response("Invalid request", { status: 400 })

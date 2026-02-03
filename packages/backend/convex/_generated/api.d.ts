@@ -11,15 +11,23 @@
 import type * as constants from "../constants.js";
 import type * as http from "../http.js";
 import type * as lib_extractTextContent from "../lib/extractTextContent.js";
+import type * as lib_logger from "../lib/logger.js";
+import type * as lib_rateLimit from "../lib/rateLimit.js";
+import type * as private_cannedResponses from "../private/cannedResponses.js";
 import type * as private_contactSessions from "../private/contactSessions.js";
+import type * as private_conversationTags from "../private/conversationTags.js";
 import type * as private_conversations from "../private/conversations.js";
 import type * as private_files from "../private/files.js";
 import type * as private_messages from "../private/messages.js";
+import type * as private_typingIndicators from "../private/typingIndicators.js";
 import type * as private_widgetSettings from "../private/widgetSettings.js";
+import type * as public_analytics from "../public/analytics.js";
+import type * as public_contact from "../public/contact.js";
 import type * as public_contactSessions from "../public/contactSessions.js";
 import type * as public_conversations from "../public/conversations.js";
 import type * as public_messages from "../public/messages.js";
 import type * as public_organizations from "../public/organizations.js";
+import type * as public_typingIndicators from "../public/typingIndicators.js";
 import type * as public_widgetSettings from "../public/widgetSettings.js";
 import type * as system_ai_agents_supportAgent from "../system/ai/agents/supportAgent.js";
 import type * as system_ai_constants from "../system/ai/constants.js";
@@ -29,7 +37,9 @@ import type * as system_ai_tools_resolveConversation from "../system/ai/tools/re
 import type * as system_ai_tools_search from "../system/ai/tools/search.js";
 import type * as system_contactSessions from "../system/contactSessions.js";
 import type * as system_conversations from "../system/conversations.js";
+import type * as system_emails from "../system/emails.js";
 import type * as system_subscriptions from "../system/subscriptions.js";
+import type * as translation_translations from "../translation/translations.js";
 import type * as users from "../users.js";
 
 import type {
@@ -50,15 +60,23 @@ declare const fullApi: ApiFromModules<{
   constants: typeof constants;
   http: typeof http;
   "lib/extractTextContent": typeof lib_extractTextContent;
+  "lib/logger": typeof lib_logger;
+  "lib/rateLimit": typeof lib_rateLimit;
+  "private/cannedResponses": typeof private_cannedResponses;
   "private/contactSessions": typeof private_contactSessions;
+  "private/conversationTags": typeof private_conversationTags;
   "private/conversations": typeof private_conversations;
   "private/files": typeof private_files;
   "private/messages": typeof private_messages;
+  "private/typingIndicators": typeof private_typingIndicators;
   "private/widgetSettings": typeof private_widgetSettings;
+  "public/analytics": typeof public_analytics;
+  "public/contact": typeof public_contact;
   "public/contactSessions": typeof public_contactSessions;
   "public/conversations": typeof public_conversations;
   "public/messages": typeof public_messages;
   "public/organizations": typeof public_organizations;
+  "public/typingIndicators": typeof public_typingIndicators;
   "public/widgetSettings": typeof public_widgetSettings;
   "system/ai/agents/supportAgent": typeof system_ai_agents_supportAgent;
   "system/ai/constants": typeof system_ai_constants;
@@ -68,7 +86,9 @@ declare const fullApi: ApiFromModules<{
   "system/ai/tools/search": typeof system_ai_tools_search;
   "system/contactSessions": typeof system_contactSessions;
   "system/conversations": typeof system_conversations;
+  "system/emails": typeof system_emails;
   "system/subscriptions": typeof system_subscriptions;
+  "translation/translations": typeof translation_translations;
   users: typeof users;
 }>;
 declare const fullApiWithMounts: typeof fullApi;

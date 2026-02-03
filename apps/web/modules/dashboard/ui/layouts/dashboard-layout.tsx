@@ -4,6 +4,7 @@ import { SidebarProvider } from "@workspace/ui/components/sidebar"
 import { cookies } from "next/headers"
 import { DashboardSidebar } from "../components/dashboard-sidebar"
 import { Provider } from "jotai"
+import { Toaster } from "@workspace/ui/components/sonner"
 
 export const DashboardLayout = async ({
   children,
@@ -19,7 +20,10 @@ export const DashboardLayout = async ({
         <Provider>
           <SidebarProvider defaultOpen={defaultOpen}>
             <DashboardSidebar />
-            <main className="flex flex-1 flex-col">{children}</main>
+            <main className="flex flex-1 flex-col overflow-hidden">
+              {children}
+            </main>
+            <Toaster />
           </SidebarProvider>
         </Provider>
       </OrganizationGuard>

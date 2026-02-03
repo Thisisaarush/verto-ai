@@ -9,6 +9,12 @@ export const upsert = mutation({
       suggestion2: v.optional(v.string()),
       suggestion3: v.optional(v.string()),
     }),
+    // Widget customization
+    primaryColor: v.optional(v.string()),
+    position: v.optional(
+      v.union(v.literal("bottom-right"), v.literal("bottom-left")),
+    ),
+    language: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -36,12 +42,18 @@ export const upsert = mutation({
       await ctx.db.patch(existingWidgetSettings._id, {
         greetMessage: args.greetMessage,
         defaultSuggestions: args.defaultSuggestions,
+        primaryColor: args.primaryColor,
+        position: args.position,
+        language: args.language,
       })
     } else {
       await ctx.db.insert("widgetSettings", {
         organizationId: orgId,
         greetMessage: args.greetMessage,
         defaultSuggestions: args.defaultSuggestions,
+        primaryColor: args.primaryColor,
+        position: args.position,
+        language: args.language,
       })
     }
   },

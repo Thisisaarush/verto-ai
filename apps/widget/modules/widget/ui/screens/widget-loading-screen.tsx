@@ -14,9 +14,23 @@ import { LoaderIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "@workspace/backend/convex/_generated/api"
-import { set } from "date-fns"
+import { Skeleton } from "@workspace/ui/components/skeleton"
 
 type InitStep = "org" | "session" | "settings" | "done"
+
+// Loading skeleton that mimics the selection screen
+const LoadingSkeleton = () => (
+  <div className="flex flex-1 flex-col gap-y-3 p-4">
+    <div className="space-y-2">
+      <Skeleton className="h-3 w-20" />
+      <Skeleton className="h-16 w-full rounded-lg" />
+    </div>
+    <Skeleton className="h-16 w-full rounded-lg" />
+    <div className="mt-auto">
+      <Skeleton className="h-20 w-full rounded-lg" />
+    </div>
+  </div>
+)
 
 export const WidgetLoadingScreen = ({
   organizationId,
@@ -34,7 +48,7 @@ export const WidgetLoadingScreen = ({
   const setScreen = useSetAtom(screenAtom)
 
   const contactSessionId = useAtomValue(
-    contactSessionIdAtomFamily(organizationId || "")
+    contactSessionIdAtomFamily(organizationId || ""),
   )
 
   // 1. Validate Organization
@@ -79,7 +93,7 @@ export const WidgetLoadingScreen = ({
 
   // 2. Validate Session
   const validateContactSession = useMutation(
-    api.public.contactSessions.validate
+    api.public.contactSessions.validate,
   )
   useEffect(() => {
     if (step !== "session") return
@@ -114,7 +128,7 @@ export const WidgetLoadingScreen = ({
       ? {
           organizationId,
         }
-      : "skip"
+      : "skip",
   )
   useEffect(() => {
     if (step !== "settings") return
@@ -137,14 +151,23 @@ export const WidgetLoadingScreen = ({
   return (
     <>
       <WidgetHeader>
-        <div className="flex flex-col justify-between gap-y-2 px-2 py-6 font-semibold">
-          <p className="text-3xl">Hi there! 👋</p>
-          <p className="text-lg">Let&apos;s get you started.</p>
+        <div className="flex items-center gap-3 px-2 py-4">
+          <Skeleton className="size-12 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-4 w-48" />
+          </div>
         </div>
       </WidgetHeader>
-      <div className="flex flex-1 flex-col items-center justify-center gap-y-4 p-4 text-muted-foreground">
-        <LoaderIcon className="animate-spin" />
-        <p className="text-sm">{loadingMessage || "Loading..."} </p>
+
+      <LoadingSkeleton />
+
+      {/* Progress indicator */}
+      <div className="flex items-center justify-center gap-2 p-4 border-t bg-background">
+        <LoaderIcon className="size-4 animate-spin text-primary" />
+        <p className="text-xs text-muted-foreground">
+          {loadingMessage || "Loading..."}
+        </p>
       </div>
     </>
   )

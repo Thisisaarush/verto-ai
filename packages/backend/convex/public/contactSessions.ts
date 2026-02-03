@@ -1,6 +1,12 @@
 import { v } from "convex/values"
 import { mutation } from "../_generated/server"
 import { SESSION_DURATION_MS } from "../constants"
+import {
+  enforceRateLimit,
+  getIdentifier,
+  RATE_LIMITS,
+  sanitizeInput,
+} from "../lib/rateLimit"
 
 export const create = mutation({
   args: {
@@ -22,15 +28,25 @@ export const create = mutation({
         cookieEnabled: v.optional(v.boolean()),
         referrer: v.optional(v.string()),
         currentUrl: v.optional(v.string()),
-      })
+      }),
     ),
   },
   handler: async (ctx, args) => {
+    // Rate limiting based on organization ID or anonymous
+    enforceRateLimit(
+      getIdentifier("sessionCreate", undefined, args.organizationId),
+      RATE_LIMITS.sessionCreate,
+    )
+
+    // Sanitize inputs
+    const sanitizedName = args.name ? sanitizeInput(args.name) : undefined
+    const sanitizedEmail = args.email ? sanitizeInput(args.email) : undefined
+
     const now = Date.now()
     const expiresAt = now + SESSION_DURATION_MS
     const contactSessionId = await ctx.db.insert("contactSessions", {
-      name: args.name,
-      email: args.email,
+      name: sanitizedName,
+      email: sanitizedEmail,
       organizationId: args.organizationId,
       expiresAt,
       metadata: args.metadata,

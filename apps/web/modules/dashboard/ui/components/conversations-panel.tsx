@@ -8,13 +8,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select"
-import { usePaginatedQuery } from "convex/react"
+import { usePaginatedQuery, useQuery } from "convex/react"
 import {
   ListIcon,
   ArrowRightIcon,
   ArrowUpIcon,
   CheckIcon,
   CornerUpLeftIcon,
+  FlagIcon,
+  TagIcon,
+  XIcon,
 } from "lucide-react"
 import { api } from "@workspace/backend/convex/_generated/api"
 import { getCountryFlagUrl, getCountryFromTimezone } from "@/lib/country-utils"
@@ -28,21 +31,41 @@ import { useAtomValue, useSetAtom } from "jotai/react"
 import { statusFilterAtom } from "../../atoms"
 import { InfiniteScrollTrigger } from "@workspace/ui/components/infinite-scroll-trigger"
 import { useInfiniteScroll } from "@workspace/ui/hooks/use-infinite-scroll"
+import { useOrganization } from "@clerk/nextjs"
+import { useState } from "react"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
 
 export const ConversationsPanel = () => {
   const pathname = usePathname()
+  const { organization } = useOrganization()
+  const [priorityFilter, setPriorityFilter] = useState<
+    "all" | "low" | "medium" | "high"
+  >("all")
+  const [tagFilter, setTagFilter] = useState<string>("all")
 
   const statusFilter = useAtomValue(statusFilterAtom)
   const setStatusFilter = useSetAtom(statusFilterAtom)
+
+  // Get available tags
+  const availableTags = useQuery(
+    api.private.conversationTags.getMany,
+    organization?.id ? { organizationId: organization.id } : "skip",
+  )
 
   const conversations = usePaginatedQuery(
     api.private.conversations.getMany,
     {
       status: statusFilter === "all" ? undefined : statusFilter,
+      priority:
+        priorityFilter === "all"
+          ? undefined
+          : (priorityFilter as "low" | "medium" | "high"),
+      tag: tagFilter === "all" ? undefined : tagFilter,
     },
     {
       initialNumItems: 10,
-    }
+    },
   )
 
   const {
@@ -59,12 +82,12 @@ export const ConversationsPanel = () => {
 
   return (
     <div className="flex h-full w-full flex-col bg-background text-sidebar-foreground">
-      <div className="flex flex-col gap-4 border-b p-2">
+      <div className="flex gap-2 border-b p-2">
         <Select
           defaultValue="all"
           onValueChange={(value) => {
             setStatusFilter(
-              value as "unresolved" | "escalated" | "resolved" | "all"
+              value as "unresolved" | "escalated" | "resolved" | "all",
             )
           }}
           value={statusFilter}
@@ -112,6 +135,76 @@ export const ConversationsPanel = () => {
             </SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Priority Filter */}
+        <Select
+          value={priorityFilter}
+          onValueChange={(value) =>
+            setPriorityFilter(value as typeof priorityFilter)
+          }
+        >
+          <SelectTrigger className="h-8 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
+            <SelectValue>
+              <div className="flex items-center gap-2">
+                <FlagIcon className="size-4" />
+                <span>
+                  {priorityFilter === "all"
+                    ? "All Priorities"
+                    : `${priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)} Priority`}
+                </span>
+              </div>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Priorities</SelectItem>
+            <SelectItem value="high">High Priority</SelectItem>
+            <SelectItem value="medium">Medium Priority</SelectItem>
+            <SelectItem value="low">Low Priority</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Tag Filter */}
+        <div className="flex items-center gap-1">
+          <Select value={tagFilter} onValueChange={setTagFilter}>
+            <SelectTrigger className="h-8 flex-1 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
+              <SelectValue>
+                <div className="flex items-center gap-2">
+                  <TagIcon className="size-4" />
+                  <span className="truncate">
+                    {tagFilter === "all" ? "All Tags" : tagFilter}
+                  </span>
+                </div>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Tags</SelectItem>
+              {availableTags?.map((tag) => (
+                <SelectItem key={tag._id} value={tag.name}>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="size-2 rounded-full"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    <span>{tag.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {(priorityFilter !== "all" || tagFilter !== "all") && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={() => {
+                setPriorityFilter("all")
+                setTagFilter("all")
+              }}
+            >
+              <XIcon className="size-4" />
+            </Button>
+          )}
+        </div>
       </div>
       {isLoadingFirstPage ? (
         <SkeletonConversations />
@@ -124,7 +217,7 @@ export const ConversationsPanel = () => {
                 conversation?.lastMessage?.message.role !== "user"
 
               const country = getCountryFromTimezone(
-                conversation.contactSession.metadata?.timezone
+                conversation.contactSession.metadata?.timezone,
               )
 
               const countryFlagUrl = country?.code
@@ -138,14 +231,14 @@ export const ConversationsPanel = () => {
                   className={cn(
                     "flex relative cursor-pointer items-start gap-3 border-b p-4 py-5 text-sm leading-tight hover:bg-accent hover:text-accent-foreground",
                     pathname === `/conversations/${conversation._id}` &&
-                      "bg-accent text-accent-foreground"
+                      "bg-accent text-accent-foreground",
                   )}
                 >
                   <div
                     className={cn(
                       "-translate-y-1/2 absolute top-1/2 left-0 h-[64%] w-1 rounded-r-full bg-neutral-300 opacity-0 transition-opacity",
                       pathname === `/conversations/${conversation._id}` &&
-                        "opacity-100"
+                        "opacity-100",
                     )}
                   />
 
@@ -173,7 +266,8 @@ export const ConversationsPanel = () => {
                         <span
                           className={cn(
                             "line-clamp-1 text-muted-foreground text-xs",
-                            !isLastMessageFromOperator && "font-bold text-black"
+                            !isLastMessageFromOperator &&
+                              "font-bold text-black",
                           )}
                         >
                           {conversation.lastMessage?.text}

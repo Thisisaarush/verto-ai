@@ -6,14 +6,24 @@
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report"
   },
   "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^20.19.9",
+    "@vitest/coverage-v8": "^2.1.0",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
     "prettier": "^3.6.2",
     "turbo": "^2.5.5",
-    "typescript": "5.7.3"
+    "typescript": "5.9.2",
+    "vitest": "^2.1.0"
   },
   "packageManager": "pnpm@10.4.1",
   "engines": {
