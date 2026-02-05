@@ -19,6 +19,7 @@ import {
   TrendingDownIcon,
 } from "lucide-react"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { MobileHeader } from "@/modules/dashboard/ui/components/mobile-header"
 
 // Stat card component
 const StatCard = ({
@@ -157,7 +158,9 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="flex-1 space-y-6 p-6">
+    <div className="flex-1 flex flex-col overflow-auto">
+      <MobileHeader title="Analytics" />
+      <div className="space-y-6 p-6">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Analytics</h2>
         <p className="text-muted-foreground">
@@ -272,7 +275,7 @@ export default function AnalyticsPage() {
               </div>
             </CardContent>
           </Card>
-        )}
+        )}      </div>
     </div>
   )
 }

@@ -19,6 +19,7 @@ import {
   DialogTrigger,
 } from "@workspace/ui/components/dialog"
 import { createScript } from "../../utils"
+import { MobileHeader } from "@/modules/dashboard/ui/components/mobile-header"
 
 export const IntegrationsView = () => {
   const { organization } = useOrganization()
@@ -55,8 +56,9 @@ export const IntegrationsView = () => {
         onOpenChange={setDialogOpen}
         snippet={selectedSnippet}
       />
-      <div className="h-full flex flex-col bg-muted overflow-auto p-8">
-        <div className="mx-auto w-full max-w-screen-md">
+      <div className="h-full flex flex-col bg-muted overflow-auto">
+        <MobileHeader title="Setup & Integrations" />
+        <div className="mx-auto w-full max-w-screen-md p-8">
           <div className="space-y-2">
             <h1 className="text-2xl md:text-4xl">Setup & Integrations</h1>
             <p className="text-muted-foreground">

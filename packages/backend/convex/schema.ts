@@ -192,5 +192,25 @@ export default defineSchema({
     lastUpdated: v.number(),
   })
     .index("by_conversation_id", ["conversationId"])
-    .index("by_participant", ["conversationId", "participantId"]),
+    
+.index("by_participant", ["conversationId", "participantId"]),
+
+  // AI Model Settings for organizations
+  aiModelSettings: defineTable({
+    organizationId: v.string(),
+    provider: v.union(
+      v.literal("google"),
+      v.literal("openai"),
+      v.literal("anthropic"),
+      v.literal("platform"),
+    ),
+    model: v.string(),
+    apiKey: v.optional(v.string()), // Encrypted API key
+    isActive: v.boolean(),
+    freeRequestsUsed: v.number(),
+    freeRequestsLimit: v.number(),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_organization_id", ["organizationId"]),
+
 })

@@ -19,6 +19,8 @@ import {
   XIcon,
   PanelRightOpenIcon,
   PanelRightCloseIcon,
+  MenuIcon,
+  MessageSquareIcon,
 } from "lucide-react"
 import {
   AIConversation,
@@ -47,6 +49,9 @@ import { toUIMessages, useThreadMessages } from "@convex-dev/agent/react"
 import { DicebearAvatar } from "@workspace/ui/components/dicebear-avatar"
 import { ConversationStatusButton } from "../components/conversation-status-button"
 import { usePanelContext } from "../layouts/conversation-id-layout"
+import { useConversationsPanelContext } from "../layouts/conversations-layout"
+import { SidebarTrigger, useSidebar } from "@workspace/ui/components/sidebar"
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile"
 import { useInfiniteScroll } from "@workspace/ui/hooks/use-infinite-scroll"
 import { InfiniteScrollTrigger } from "@workspace/ui/components/infinite-scroll-trigger"
 import { toast } from "sonner"
@@ -126,6 +131,9 @@ export const ConversationIdView = ({
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const { organization } = useOrganization()
   const { isPanelCollapsed, togglePanel } = usePanelContext()
+  const { toggleSidebar } = useSidebar()
+  const { setIsOpen: setConversationsOpen } = useConversationsPanelContext()
+  const isMobile = useIsMobile()
 
   const conversation = useQuery(api.private.conversations.getOne, {
     conversationId,
@@ -227,7 +235,7 @@ export const ConversationIdView = ({
     }
   }, [conversationId, setTyping])
 
-  const { topElementRef, handleLoadMore, canLoadMore, isLoadingMore } =
+  const { topElementRef, handleLoadMore, canLoadMore, isLoadingMore, isLoadingFirstPage } =
     useInfiniteScroll({
       status: messages.status,
       loadMore: messages.loadMore,
@@ -443,9 +451,27 @@ export const ConversationIdView = ({
 
   return (
     <div className="flex h-full flex-col bg-muted overflow-hidden">
-      {/* Enhanced Header */}
-      <header className="flex items-center justify-between border-b bg-background px-4 py-3 shrink-0">
-        <div className="flex items-center gap-3">
+      <header className="flex items-center justify-between gap-2 border-b bg-background px-3 py-2.5 shrink-0">
+        {/* Left section: Menu + User info */}
+        <div className="flex items-center gap-2 min-w-0">
+          {isMobile && (
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={toggleSidebar}
+              >
+                <MenuIcon className="size-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setConversationsOpen(true)}
+              >
+                <MessageSquareIcon className="size-4" />
+              </Button>
+            </div>
+          )}
           <DicebearAvatar
             seed={conversation?.contactSessionId ?? "user"}
             size={40}
@@ -623,6 +649,7 @@ export const ConversationIdView = ({
             onLoadMore={handleLoadMore}
             canLoadMore={canLoadMore}
             isLoadingMore={isLoadingMore}
+            isLoadingFirstPage={isLoadingFirstPage}
           />
           {uiMessages.map((message) => (
             <AIMessage

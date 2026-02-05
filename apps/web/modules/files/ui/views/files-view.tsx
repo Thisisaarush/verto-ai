@@ -31,6 +31,7 @@ import { Badge } from "@workspace/ui/components/badge"
 import { UploadDialog } from "../components/upload-dialog"
 import { useState } from "react"
 import { DeleteFileDialog } from "../components/delete-file-dialog"
+import { MobileHeader } from "@/modules/dashboard/ui/components/mobile-header"
 
 export const FilesView = () => {
   const files = usePaginatedQuery(
@@ -78,8 +79,9 @@ export const FilesView = () => {
         onFileUploaded={() => {}}
       />
 
-      <div className="h-full flex flex-col bg-muted overflow-auto p-8">
-        <div className="mx-auto w-full max-w-screen-md">
+      <div className="h-full flex flex-col bg-muted overflow-auto">
+        <MobileHeader title="Knowledge Base" />
+        <div className="mx-auto w-full max-w-screen-md p-8">
           <div className="space-y-2">
             <h1 className="text-2xl md:text-4xl">Knowledge Base</h1>
             <p className="text-muted-foreground">
@@ -177,6 +179,7 @@ export const FilesView = () => {
                   ref={topElementRef}
                   canLoadMore={canLoadMore}
                   isLoadingMore={isLoadingMore}
+                  isLoadingFirstPage={isLoadingFirstPage}
                   onLoadMore={handleLoadMore}
                 />
               </div>

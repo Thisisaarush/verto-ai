@@ -4,6 +4,7 @@ import { cn } from "@workspace/ui/lib/utils"
 interface InfiniteScrollTriggerProps {
   canLoadMore: boolean
   isLoadingMore: boolean
+  isLoadingFirstPage?: boolean
   onLoadMore: () => void
   loadMoreText?: string
   noMoreText?: string
@@ -14,12 +15,17 @@ interface InfiniteScrollTriggerProps {
 export const InfiniteScrollTrigger = ({
   canLoadMore,
   isLoadingMore,
+  isLoadingFirstPage = false,
   onLoadMore,
   loadMoreText = "Load More",
   noMoreText = "No More Items",
   className,
   ref,
 }: InfiniteScrollTriggerProps) => {
+  if (isLoadingFirstPage) {
+    return <div ref={ref} className="h-1" />
+  }
+
   let text = loadMoreText
 
   if (isLoadingMore) {

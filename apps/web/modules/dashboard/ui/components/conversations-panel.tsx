@@ -35,8 +35,16 @@ import { useOrganization } from "@clerk/nextjs"
 import { useState } from "react"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { SidebarTrigger } from "@workspace/ui/components/sidebar"
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile"
 
-export const ConversationsPanel = () => {
+interface ConversationsPanelProps {
+  onConversationClick?: () => void
+}
+
+export const ConversationsPanel = ({
+  onConversationClick,
+}: ConversationsPanelProps = {}) => {
   const pathname = usePathname()
   const { organization } = useOrganization()
   const [priorityFilter, setPriorityFilter] = useState<
@@ -46,6 +54,8 @@ export const ConversationsPanel = () => {
 
   const statusFilter = useAtomValue(statusFilterAtom)
   const setStatusFilter = useSetAtom(statusFilterAtom)
+
+  const isMobile = useIsMobile()
 
   // Get available tags
   const availableTags = useQuery(
@@ -81,8 +91,14 @@ export const ConversationsPanel = () => {
   })
 
   return (
-    <div className="flex h-full w-full flex-col bg-background text-sidebar-foreground">
-      <div className="flex gap-2 border-b p-2">
+    <div className="flex h-full w-full flex-col bg-background text-sidebar-foreground"> 
+      {isMobile && (
+        <div className="flex items-center gap-2 border-b px-3 py-2.5 shrink-0">
+          <SidebarTrigger />
+          <h1 className="font-semibold">Conversations</h1>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1.5 border-b p-2">
         <Select
           defaultValue="all"
           onValueChange={(value) => {
@@ -225,7 +241,7 @@ export const ConversationsPanel = () => {
                 : undefined
 
               return (
-                <Link
+                <Link onClick={onConversationClick}
                   href={`/conversations/${conversation._id}`}
                   key={conversation._id}
                   className={cn(
@@ -282,6 +298,7 @@ export const ConversationsPanel = () => {
             <InfiniteScrollTrigger
               canLoadMore={canLoadMore}
               isLoadingMore={isLoadingMore}
+              isLoadingFirstPage={isLoadingFirstPage}
               onLoadMore={handleLoadMore}
               ref={topElementRef}
             />

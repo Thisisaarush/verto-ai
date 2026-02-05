@@ -22,7 +22,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@workspace/ui/components/sidebar"
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile"
 import { cn } from "@workspace/ui/lib/utils"
 
 const customerSupportItems = [
@@ -66,9 +68,18 @@ const accountItems = [
 
 export const DashboardSidebar = () => {
   const pathname = usePathname()
+  const { setOpenMobile } = useSidebar()
+  const isMobile = useIsMobile()
+
   const isActive = (url: string) => {
     if (url === "/") return pathname === "/"
     return pathname.startsWith(url)
+  }
+
+  const handleNavClick = () => {
+    if (isMobile) {
+      setOpenMobile(false)
+    }
   }
 
   return (
@@ -114,7 +125,7 @@ export const DashboardSidebar = () => {
                     className={cn(isActive(item.url) && "bg-muted")}
                     tooltip={item?.title}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleNavClick}>
                       <item.icon className="size-4" />
                       {item.title}
                     </Link>
@@ -138,7 +149,7 @@ export const DashboardSidebar = () => {
                     className={cn(isActive(item.url) && "bg-muted")}
                     tooltip={item?.title}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleNavClick}>
                       <item.icon className="size-4" />
                       {item.title}
                     </Link>
@@ -162,7 +173,7 @@ export const DashboardSidebar = () => {
                     className={cn(isActive(item.url) && "bg-muted")}
                     tooltip={item?.title}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleNavClick}>
                       <item.icon className="size-4" />
                       {item.title}
                     </Link>

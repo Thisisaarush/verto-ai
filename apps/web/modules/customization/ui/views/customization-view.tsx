@@ -6,12 +6,14 @@ import { Loader2Icon } from "lucide-react"
 import { CustomizationForm } from "../components/customization-form"
 import { CannedResponsesManager } from "../components/canned-responses-manager"
 import { ConversationTagsManager } from "../components/conversation-tags-manager"
+import { AIModelSettingsManager } from "../components/ai-model-settings-manager"
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
+import { MobileHeader } from "@/modules/dashboard/ui/components/mobile-header"
 
 export const CustomizationView = () => {
   const widgetSettings = useQuery(api.private.widgetSettings.getOne)
@@ -26,21 +28,27 @@ export const CustomizationView = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-muted overflow-auto p-8">
-      <div className="mx-auto w-full max-w-5xl space-y-6">
+    <div className="h-full flex flex-col bg-muted overflow-auto">
+      <MobileHeader title="Customization" />
+      <div className="mx-auto w-full max-w-5xl space-y-6 p-8">
         <div className="space-y-2">
           <h1 className="text-2xl md:text-4xl">Customization</h1>
           <p className="text-muted-foreground">
-            Customize your chat widget appearance and manage quick responses
+            Customize your chat widget appearance, AI model, and manage quick
+            responses
           </p>
         </div>
 
-        <Tabs defaultValue="widget" className="w-full">
+        <Tabs defaultValue="ai-model" className="w-full">
           <TabsList>
+            <TabsTrigger value="ai-model">AI Model</TabsTrigger>
             <TabsTrigger value="widget">Widget Settings</TabsTrigger>
             <TabsTrigger value="responses">Canned Responses</TabsTrigger>
             <TabsTrigger value="tags">Tags</TabsTrigger>
           </TabsList>
+          <TabsContent value="ai-model" className="mt-6">
+            <AIModelSettingsManager />
+          </TabsContent>
           <TabsContent value="widget" className="mt-6">
             <CustomizationForm initialData={widgetSettings} />
           </TabsContent>

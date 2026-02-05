@@ -11,8 +11,10 @@
 import type * as constants from "../constants.js";
 import type * as http from "../http.js";
 import type * as lib_extractTextContent from "../lib/extractTextContent.js";
+import type * as lib_getAIModel from "../lib/getAIModel.js";
 import type * as lib_logger from "../lib/logger.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
+import type * as private_aiModelSettings from "../private/aiModelSettings.js";
 import type * as private_cannedResponses from "../private/cannedResponses.js";
 import type * as private_contactSessions from "../private/contactSessions.js";
 import type * as private_conversationTags from "../private/conversationTags.js";
@@ -60,8 +62,10 @@ declare const fullApi: ApiFromModules<{
   constants: typeof constants;
   http: typeof http;
   "lib/extractTextContent": typeof lib_extractTextContent;
+  "lib/getAIModel": typeof lib_getAIModel;
   "lib/logger": typeof lib_logger;
   "lib/rateLimit": typeof lib_rateLimit;
+  "private/aiModelSettings": typeof private_aiModelSettings;
   "private/cannedResponses": typeof private_cannedResponses;
   "private/contactSessions": typeof private_contactSessions;
   "private/conversationTags": typeof private_conversationTags;
