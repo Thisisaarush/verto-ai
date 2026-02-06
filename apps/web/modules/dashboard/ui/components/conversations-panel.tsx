@@ -14,7 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
-import { usePaginatedQuery, useQuery } from "convex/react"
+import { usePaginatedQuery, useQuery, useAction } from "convex/react"
 import {
   ListIcon,
   ArrowRightIcon,
@@ -26,6 +26,8 @@ import {
   XIcon,
   SparklesIcon,
   SmileIcon,
+  SearchIcon,
+  Loader2Icon,
 } from "lucide-react"
 import { api } from "@workspace/backend/convex/_generated/api"
 import { getCountryFlagUrl, getCountryFromTimezone } from "@/lib/country-utils"
@@ -40,11 +42,12 @@ import { statusFilterAtom } from "../../atoms"
 import { InfiniteScrollTrigger } from "@workspace/ui/components/infinite-scroll-trigger"
 import { useInfiniteScroll } from "@workspace/ui/hooks/use-infinite-scroll"
 import { useOrganization } from "@clerk/nextjs"
-import { useState } from "react"
+import { useState, useCallback, useRef } from "react"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { SidebarTrigger } from "@workspace/ui/components/sidebar"
 import { useIsMobile } from "@workspace/ui/hooks/use-mobile"
+import { Input } from "@workspace/ui/components/input"
 
 interface ConversationsPanelProps {
   onConversationClick?: () => void
@@ -63,10 +66,66 @@ export const ConversationsPanel = ({
   >("all")
   const [tagFilter, setTagFilter] = useState<string>("all")
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchResults, setSearchResults] = useState<Awaited<
+    ReturnType<typeof searchConversations>
+  > | null>(null)
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const searchConversations = useAction(
+    api.private.conversations.searchConversations,
+  )
+
   const statusFilter = useAtomValue(statusFilterAtom)
   const setStatusFilter = useSetAtom(statusFilterAtom)
 
   const isMobile = useIsMobile()
+
+  // Debounced search handler
+  const handleSearch = useCallback(
+    (query: string) => {
+      setSearchQuery(query)
+
+      // Clear previous timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+
+      // If query is empty or too short, clear results
+      if (!query.trim() || query.trim().length < 3) {
+        setSearchResults(null)
+        setIsSearching(false)
+        return
+      }
+
+      // Debounce the search (500ms for better UX)
+      setIsSearching(true)
+      searchTimeoutRef.current = setTimeout(async () => {
+        try {
+          const results = await searchConversations({ query, limit: 20 })
+          setSearchResults(results)
+        } catch (error) {
+          console.error("Search failed:", error)
+          setSearchResults(null)
+        } finally {
+          setIsSearching(false)
+        }
+      }, 500)
+    },
+    [searchConversations],
+  )
+
+  // Clear search
+  const clearSearch = useCallback(() => {
+    setSearchQuery("")
+    setSearchResults(null)
+    setIsSearching(false)
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+  }, [])
 
   // Get available tags
   const availableTags = useQuery(
@@ -113,165 +172,304 @@ export const ConversationsPanel = ({
           <h1 className="font-semibold">Conversations</h1>
         </div>
       )}
-      <div className="flex flex-wrap gap-1.5 border-b p-2">
-        <Select
-          defaultValue="all"
-          onValueChange={(value) => {
-            setStatusFilter(
-              value as "unresolved" | "escalated" | "resolved" | "all",
-            )
-          }}
-          value={statusFilter}
-        >
-          <SelectTrigger className="h-8 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
-            <SelectValue placeholder="Filter">
-              <div className="flex items-center gap-2">
-                <ListIcon className="size-4" />
-                <span>
-                  {statusFilter === "all"
-                    ? "All"
-                    : statusFilter === "escalated"
-                      ? "Escalated"
-                      : statusFilter === "unresolved"
-                        ? "Unresolved"
-                        : "Resolved"}
-                </span>
-              </div>
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              <div className="flex items-center gap-2">
-                <ListIcon className="size-4" />
-                <span>All</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="escalated">
-              <div className="flex items-center gap-2">
-                <ArrowUpIcon className="size-4" />
-                <span>Escalated</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="unresolved">
-              <div className="flex items-center gap-2">
-                <ArrowRightIcon className="size-4" />
-                <span>Unresolved</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="resolved">
-              <div className="flex items-center gap-2">
-                <CheckIcon className="size-4" />
-                <span>Resolved</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Priority Filter */}
-        <Select
-          value={priorityFilter}
-          onValueChange={(value) =>
-            setPriorityFilter(value as typeof priorityFilter)
-          }
-        >
-          <SelectTrigger className="h-8 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
-            <SelectValue>
-              <div className="flex items-center gap-2">
-                <FlagIcon className="size-4" />
-                <span>
-                  {priorityFilter === "all"
-                    ? "All Priorities"
-                    : `${priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)} Priority`}
-                </span>
-              </div>
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Priorities</SelectItem>
-            <SelectItem value="high">High Priority</SelectItem>
-            <SelectItem value="medium">Medium Priority</SelectItem>
-            <SelectItem value="low">Low Priority</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Sentiment Filter */}
-        <Select
-          value={sentimentFilter}
-          onValueChange={(value) =>
-            setSentimentFilter(value as typeof sentimentFilter)
-          }
-        >
-          <SelectTrigger className="h-8 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
-            <SelectValue>
-              <div className="flex items-center gap-2">
-                <SmileIcon className="size-4" />
-                <span>
-                  {sentimentFilter === "all"
-                    ? "All Moods"
-                    : sentimentFilter === "positive"
-                      ? "😊 Positive"
-                      : sentimentFilter === "neutral"
-                        ? "😐 Neutral"
-                        : "😤 Frustrated"}
-                </span>
-              </div>
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Moods</SelectItem>
-            <SelectItem value="positive">😊 Positive</SelectItem>
-            <SelectItem value="neutral">😐 Neutral</SelectItem>
-            <SelectItem value="negative">😤 Frustrated</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Tag Filter */}
-        <div className="flex items-center gap-1">
-          <Select value={tagFilter} onValueChange={setTagFilter}>
-            <SelectTrigger className="h-8 flex-1 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
-              <SelectValue>
+      {/* Search Input */}
+      <div className="border-b p-2">
+        <div className="relative">
+          <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            placeholder="Search (min 3 chars)..."
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+            className="pl-8 pr-8 h-9"
+          />
+          {searchQuery && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="absolute right-1 top-1/2 -translate-y-1/2 size-7"
+              onClick={clearSearch}
+            >
+              {isSearching ? (
+                <Loader2Icon className="size-4 animate-spin" />
+              ) : (
+                <XIcon className="size-4" />
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+      {/* Hide filters when searching */}
+      {!searchQuery && (
+        <div className="flex flex-wrap gap-1.5 border-b p-2">
+          <Select
+            defaultValue="all"
+            onValueChange={(value) => {
+              setStatusFilter(
+                value as "unresolved" | "escalated" | "resolved" | "all",
+              )
+            }}
+            value={statusFilter}
+          >
+            <SelectTrigger className="h-8 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
+              <SelectValue placeholder="Filter">
                 <div className="flex items-center gap-2">
-                  <TagIcon className="size-4" />
-                  <span className="truncate">
-                    {tagFilter === "all" ? "All Tags" : tagFilter}
+                  <ListIcon className="size-4" />
+                  <span>
+                    {statusFilter === "all"
+                      ? "All"
+                      : statusFilter === "escalated"
+                        ? "Escalated"
+                        : statusFilter === "unresolved"
+                          ? "Unresolved"
+                          : "Resolved"}
                   </span>
                 </div>
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Tags</SelectItem>
-              {availableTags?.map((tag) => (
-                <SelectItem key={tag._id} value={tag.name}>
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="size-2 rounded-full"
-                      style={{ backgroundColor: tag.color }}
-                    />
-                    <span>{tag.name}</span>
-                  </div>
-                </SelectItem>
-              ))}
+              <SelectItem value="all">
+                <div className="flex items-center gap-2">
+                  <ListIcon className="size-4" />
+                  <span>All</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="escalated">
+                <div className="flex items-center gap-2">
+                  <ArrowUpIcon className="size-4" />
+                  <span>Escalated</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="unresolved">
+                <div className="flex items-center gap-2">
+                  <ArrowRightIcon className="size-4" />
+                  <span>Unresolved</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="resolved">
+                <div className="flex items-center gap-2">
+                  <CheckIcon className="size-4" />
+                  <span>Resolved</span>
+                </div>
+              </SelectItem>
             </SelectContent>
           </Select>
-          {(priorityFilter !== "all" ||
-            sentimentFilter !== "all" ||
-            tagFilter !== "all") && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              onClick={() => {
-                setPriorityFilter("all")
-                setSentimentFilter("all")
-                setTagFilter("all")
-              }}
-            >
-              <XIcon className="size-4" />
-            </Button>
-          )}
+
+          {/* Priority Filter */}
+          <Select
+            value={priorityFilter}
+            onValueChange={(value) =>
+              setPriorityFilter(value as typeof priorityFilter)
+            }
+          >
+            <SelectTrigger className="h-8 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
+              <SelectValue>
+                <div className="flex items-center gap-2">
+                  <FlagIcon className="size-4" />
+                  <span>
+                    {priorityFilter === "all"
+                      ? "All Priorities"
+                      : `${priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)} Priority`}
+                  </span>
+                </div>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="high">High Priority</SelectItem>
+              <SelectItem value="medium">Medium Priority</SelectItem>
+              <SelectItem value="low">Low Priority</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Sentiment Filter */}
+          <Select
+            value={sentimentFilter}
+            onValueChange={(value) =>
+              setSentimentFilter(value as typeof sentimentFilter)
+            }
+          >
+            <SelectTrigger className="h-8 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
+              <SelectValue>
+                <div className="flex items-center gap-2">
+                  <SmileIcon className="size-4" />
+                  <span>
+                    {sentimentFilter === "all"
+                      ? "All Moods"
+                      : sentimentFilter === "positive"
+                        ? "😊 Positive"
+                        : sentimentFilter === "neutral"
+                          ? "😐 Neutral"
+                          : "😤 Frustrated"}
+                  </span>
+                </div>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Moods</SelectItem>
+              <SelectItem value="positive">😊 Positive</SelectItem>
+              <SelectItem value="neutral">😐 Neutral</SelectItem>
+              <SelectItem value="negative">😤 Frustrated</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Tag Filter */}
+          <div className="flex items-center gap-1">
+            <Select value={tagFilter} onValueChange={setTagFilter}>
+              <SelectTrigger className="h-8 flex-1 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
+                <SelectValue>
+                  <div className="flex items-center gap-2">
+                    <TagIcon className="size-4" />
+                    <span className="truncate">
+                      {tagFilter === "all" ? "All Tags" : tagFilter}
+                    </span>
+                  </div>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tags</SelectItem>
+                {availableTags?.map((tag) => (
+                  <SelectItem key={tag._id} value={tag.name}>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="size-2 rounded-full"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      <span>{tag.name}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(priorityFilter !== "all" ||
+              sentimentFilter !== "all" ||
+              tagFilter !== "all") && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={() => {
+                  setPriorityFilter("all")
+                  setSentimentFilter("all")
+                  setTagFilter("all")
+                }}
+              >
+                <XIcon className="size-4" />
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
-      {isLoadingFirstPage ? (
+      )}
+      {/* Search hint when query is too short */}
+      {searchQuery &&
+      searchQuery.trim().length > 0 &&
+      searchQuery.trim().length < 3 ? (
+        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+          <SearchIcon className="size-6 mb-2 opacity-50" />
+          <p className="text-sm">Type at least 3 characters to search</p>
+        </div>
+      ) : /* Search loading state */
+      searchQuery && searchQuery.trim().length >= 3 && isSearching ? (
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <Loader2Icon className="size-8 mb-3 animate-spin" />
+          <p className="text-sm">Searching...</p>
+        </div>
+      ) : /* Search Results */
+      searchQuery &&
+        searchQuery.trim().length >= 3 &&
+        searchResults !== null ? (
+        <ScrollArea className="max-h-[calc(100vh-53px)]">
+          <div className="flex w-full flex-1 flex-col text-sm">
+            {searchResults.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <SearchIcon className="size-8 mb-3 opacity-50" />
+                <p className="text-sm">No conversations found</p>
+                <p className="text-xs mt-1">Try a different search term</p>
+              </div>
+            ) : (
+              <>
+                <div className="px-4 py-2 text-xs text-muted-foreground border-b bg-muted/30">
+                  {searchResults.length} result
+                  {searchResults.length !== 1 ? "s" : ""} found
+                </div>
+                {searchResults.map((result) => {
+                  const country = getCountryFromTimezone(
+                    result.contactSession.metadata?.timezone,
+                  )
+                  const countryFlagUrl = country?.code
+                    ? getCountryFlagUrl(country.code)
+                    : undefined
+
+                  return (
+                    <Link
+                      onClick={onConversationClick}
+                      href={`/conversations/${result.conversation._id}`}
+                      key={result.conversation._id}
+                      className={cn(
+                        "flex relative cursor-pointer items-start gap-3 border-b p-4 py-5 text-sm leading-tight hover:bg-accent hover:text-accent-foreground",
+                        pathname ===
+                          `/conversations/${result.conversation._id}` &&
+                          "bg-accent text-accent-foreground",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "-translate-y-1/2 absolute top-1/2 left-0 h-[64%] w-1 rounded-r-full bg-neutral-300 opacity-0 transition-opacity",
+                          pathname ===
+                            `/conversations/${result.conversation._id}` &&
+                            "opacity-100",
+                        )}
+                      />
+
+                      <DicebearAvatar
+                        seed={result.contactSession._id}
+                        badgeImageUrl={countryFlagUrl}
+                        size={40}
+                        className="shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex w-full items-center gap-2">
+                          <span className="truncate font-bold">
+                            {result.contactSession?.name}
+                          </span>
+                          <span className="ml-auto shrink-0 text-muted-foreground text-xs">
+                            {formatDistanceToNow(
+                              result.conversation._creationTime,
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <ConversationStatusIcon
+                            status={result.conversation.status}
+                          />
+                        </div>
+
+                        {/* Matching messages preview */}
+                        <div className="mt-2 space-y-1">
+                          {result.matchingMessages.slice(0, 2).map((msg) => (
+                            <div
+                              key={msg._id}
+                              className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1"
+                            >
+                              <span className="font-medium text-foreground/80">
+                                {msg.role === "user" ? "Customer" : "Agent"}:
+                              </span>{" "}
+                              <span className="line-clamp-1">
+                                {msg.text?.slice(0, 100)}
+                                {(msg.text?.length || 0) > 100 ? "..." : ""}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </>
+            )}
+          </div>
+        </ScrollArea>
+      ) : isLoadingFirstPage ? (
         <SkeletonConversations />
       ) : (
         <ScrollArea className="max-h-[calc(100vh-53px)]">

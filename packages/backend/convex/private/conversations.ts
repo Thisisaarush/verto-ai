@@ -1,4 +1,4 @@
-import { action, mutation, query } from "../_generated/server"
+import { action, internalQuery, mutation, query } from "../_generated/server"
 import { ConvexError, v } from "convex/values"
 import { supportAgent } from "../system/ai/agents/supportAgent"
 import { MessageDoc } from "@convex-dev/agent"
@@ -163,6 +163,26 @@ export const markAsRead = mutation({
     await ctx.db.patch(args.conversationId, {
       lastReadAt: Date.now(),
     })
+  },
+})
+
+// Internal query for search - fetches recent conversations for an org
+export const getManyInternal = internalQuery({
+  args: {
+    organizationId: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 50
+    const conversations = await ctx.db
+      .query("conversations")
+      .withIndex("by_organization_id", (q) =>
+        q.eq("organizationId", args.organizationId),
+      )
+      .order("desc")
+      .take(limit)
+
+    return conversations
   },
 })
 
@@ -389,5 +409,142 @@ export const getSuggestedReplies = action({
     )
 
     return suggestions
+  },
+})
+
+// Search conversations by message content
+export const searchConversations = action({
+  args: {
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      conversation: Doc<"conversations">
+      contactSession: Doc<"contactSessions">
+      matchingMessages: Array<{
+        _id: string
+        text: string | null
+        role: "user" | "assistant"
+        _creationTime: number
+      }>
+    }>
+  > => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      })
+    }
+
+    const orgId = identity.orgId as string
+    if (!orgId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authorized",
+      })
+    }
+
+    const searchQuery = args.query.trim().toLowerCase()
+    if (!searchQuery || searchQuery.length < 3) {
+      return []
+    }
+
+    // Get recent conversations for this org (limit to 50 for performance)
+    const conversations = await ctx.runQuery(
+      internal.private.conversations.getManyInternal,
+      { organizationId: orgId, limit: 50 },
+    )
+
+    if (!conversations || conversations.length === 0) {
+      return []
+    }
+
+    const results: Array<{
+      conversation: Doc<"conversations">
+      contactSession: Doc<"contactSessions">
+      matchingMessages: Array<{
+        _id: string
+        text: string | null
+        role: "user" | "assistant"
+        _creationTime: number
+      }>
+    }> = []
+
+    const limit = args.limit || 20
+
+    // Search through each conversation's messages
+    for (const conv of conversations) {
+      if (results.length >= limit) break
+
+      // Get messages for this conversation's thread
+      const messages = await ctx.runQuery(
+        internal.private.messages.getAllForThread,
+        { threadId: conv.threadId },
+      )
+
+      if (!messages || messages.length === 0) continue
+
+      // Find matching messages
+      const matchingMessages: Array<{
+        _id: string
+        text: string | null
+        role: "user" | "assistant"
+        _creationTime: number
+      }> = []
+
+      for (const msg of messages) {
+        // Extract text content from the message
+        let text: string | null = null
+        if (typeof msg.message?.content === "string") {
+          text = msg.message.content
+        } else if (Array.isArray(msg.message?.content)) {
+          const textParts = (
+            msg.message.content as Array<{ type: string; text?: string }>
+          )
+            .filter((part) => part.type === "text" && part.text)
+            .map((part) => part.text!)
+          text = textParts.join(" ")
+        }
+
+        // Check if message contains the search query
+        if (text && text.toLowerCase().includes(searchQuery)) {
+          const role =
+            msg.message?.role === "user" ? "user" : ("assistant" as const)
+          matchingMessages.push({
+            _id: msg._id,
+            text,
+            role,
+            _creationTime: msg._creationTime,
+          })
+        }
+
+        // Limit to 3 matching messages per conversation
+        if (matchingMessages.length >= 3) break
+      }
+
+      // Only include conversations with matching messages
+      if (matchingMessages.length > 0) {
+        // Get contact session
+        const contactSession = await ctx.runQuery(
+          internal.system.contactSessions.getOne,
+          { contactSessionId: conv.contactSessionId },
+        )
+
+        if (contactSession) {
+          results.push({
+            conversation: conv,
+            contactSession,
+            matchingMessages,
+          })
+        }
+      }
+    }
+
+    return results
   },
 })
