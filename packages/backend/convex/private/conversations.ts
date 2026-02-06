@@ -4,6 +4,7 @@ import { supportAgent } from "../system/ai/agents/supportAgent"
 import { MessageDoc } from "@convex-dev/agent"
 import { paginationOptsValidator, PaginationResult } from "convex/server"
 import { Doc } from "../_generated/dataModel"
+import { internal } from "../_generated/api"
 
 export const updateStatus = mutation({
   args: {
@@ -56,6 +57,14 @@ export const updateStatus = mutation({
     }
     if (args.status === "resolved" && !conversation.resolvedAt) {
       updates.resolvedAt = Date.now()
+      // Delete all attachments for this conversation
+      await ctx.scheduler.runAfter(
+        0,
+        internal.private.attachments.deleteAllForConversation,
+        {
+          conversationId: args.conversationId,
+        },
+      )
     }
 
     await ctx.db.patch(args.conversationId, updates)

@@ -19,6 +19,8 @@ import {
   UserIcon,
   BotIcon,
   HeadphonesIcon,
+  MicIcon,
+  MicOffIcon,
 } from "lucide-react"
 import WidgetHeader from "../components/widget-header"
 import { Button } from "@workspace/ui/components/button"
@@ -41,6 +43,7 @@ import {
 } from "@workspace/ui/components/ai/conversation"
 import {
   AIInput,
+  AIInputButton,
   AIInputSubmit,
   AIInputTextarea,
   AIInputToolbar,
@@ -71,8 +74,17 @@ import {
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import { useMemo, useState, useCallback, useEffect, useRef } from "react"
+import { useSpeechToText } from "@workspace/ui/hooks/use-speech-to-text"
 import { formatDistanceToNow, format } from "date-fns"
+import { useFileUpload } from "@/hooks/use-file-upload"
+import { FileIcon, ImageIcon, Loader2Icon } from "lucide-react"
 
 const formSchema = z.object({
   message: z
@@ -133,6 +145,94 @@ const MessageSkeleton = () => (
   </div>
 )
 
+// Attachment display component
+const AttachmentPreview = ({
+  attachment,
+}: {
+  attachment: {
+    id: string
+    filename: string
+    mimeType: string
+    size: number
+    url?: string
+    uploadedBy: "user" | "operator"
+  }
+}) => {
+  const [isOpen, setIsOpen] = useState(false)
+  const isImage = attachment.mimeType.startsWith("image/")
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  if (!attachment.url) return null
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className="block overflow-hidden rounded-lg border bg-background hover:bg-muted transition-colors text-left"
+      >
+        {isImage ? (
+          <div className="relative">
+            <img
+              src={attachment.url}
+              alt={attachment.filename}
+              className="max-h-48 max-w-full object-contain"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 p-3">
+            <FileIcon className="size-8 text-muted-foreground shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {attachment.filename}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatSize(attachment.size)}
+              </p>
+            </div>
+          </div>
+        )}
+      </button>
+
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8">{attachment.filename}</DialogTitle>
+          </DialogHeader>
+          {isImage ? (
+            <div className="flex items-center justify-center">
+              <img
+                src={attachment.url}
+                alt={attachment.filename}
+                className="max-w-full max-h-[70vh] object-contain"
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4 py-8">
+              <FileIcon className="size-16 text-muted-foreground" />
+              <div className="text-center">
+                <p className="font-medium">{attachment.filename}</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatSize(attachment.size)}
+                </p>
+              </div>
+              <Button asChild>
+                <a href={attachment.url} download={attachment.filename}>
+                  Download File
+                </a>
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 export const WidgetChatScreen = () => {
   const setScreen = useSetAtom(screenAtom)
   const setConversationId = useSetAtom(conversationIdAtom)
@@ -188,6 +288,14 @@ export const WidgetChatScreen = () => {
     {
       initialNumItems: 10,
     },
+  )
+
+  // Fetch attachments for the conversation
+  const conversationAttachments = useQuery(
+    api.public.attachments.getByConversation,
+    conversationId && contactSessionId
+      ? { conversationId, contactSessionId }
+      : "skip",
   )
 
   // Typing indicator queries and mutations
@@ -252,11 +360,51 @@ export const WidgetChatScreen = () => {
     },
   })
 
+  const {
+    isSupported: isSpeechSupported,
+    isListening,
+    stopListening,
+    toggleListening,
+    clearTranscript,
+  } = useSpeechToText({
+    onResult: (transcript) => {
+      form.setValue("message", transcript, { shouldValidate: true })
+    },
+  })
+
+  // File upload
+  const {
+    attachments,
+    isUploading,
+    uploadedAttachmentIds,
+    clearAttachments,
+    openFilePicker,
+    handleFileChange,
+    fileInputRef,
+    acceptedTypes,
+    removeAttachment,
+  } = useFileUpload({
+    organizationId: organizationId || "",
+    conversationId,
+    contactSessionId: contactSessionId || "",
+    onError: (error) => {
+      console.error("File upload error:", error)
+    },
+  })
+
   const createMessage = useAction(api.public.messages.create)
 
   const onSubmit = useCallback(
     async (values: z.infer<typeof formSchema>) => {
       if (!conversation || !contactSessionId) return
+
+      // Get attachment IDs before clearing
+      const attachmentIdsToSend = [...uploadedAttachmentIds]
+
+      // Stop speech recognition when sending
+      stopListening()
+      clearTranscript()
+      clearAttachments()
 
       const messageId = `temp-${Date.now()}`
       setSendingMessages((prev) => new Set(prev).add(messageId))
@@ -269,6 +417,8 @@ export const WidgetChatScreen = () => {
           threadId: conversation.threadId,
           prompt: values.message,
           contactSessionId,
+          attachmentIds:
+            attachmentIdsToSend.length > 0 ? attachmentIdsToSend : undefined,
         })
         setSendingMessages((prev) => {
           const next = new Set(prev)
@@ -286,7 +436,16 @@ export const WidgetChatScreen = () => {
         )
       }
     },
-    [conversation, contactSessionId, createMessage, form],
+    [
+      conversation,
+      contactSessionId,
+      createMessage,
+      form,
+      stopListening,
+      clearTranscript,
+      clearAttachments,
+      uploadedAttachmentIds,
+    ],
   )
 
   const retryMessage = useCallback(
@@ -311,6 +470,47 @@ export const WidgetChatScreen = () => {
   const uiMessages = toUIMessages(messages.results ?? [])
   const isLoading = messages.status === "LoadingFirstPage"
   const isConversationLoading = conversation === undefined
+
+  // Create a unified timeline of messages and attachments sorted by time
+  type TimelineItem =
+    | { type: "message"; data: (typeof uiMessages)[number] }
+    | {
+        type: "attachment"
+        data: NonNullable<typeof conversationAttachments>[number]
+      }
+
+  const timeline = useMemo<TimelineItem[]>(() => {
+    const items: TimelineItem[] = []
+
+    // Add all messages to timeline
+    for (const message of uiMessages) {
+      items.push({
+        type: "message",
+        data: message,
+      })
+    }
+
+    // Add all attachments to timeline
+    if (conversationAttachments) {
+      for (const attachment of conversationAttachments) {
+        items.push({
+          type: "attachment",
+          data: attachment,
+        })
+      }
+    }
+
+    // Sort by creation time (messages have _creationTime, attachments have createdAt)
+    items.sort((a, b) => {
+      const timeA =
+        a.type === "message" ? a.data._creationTime : a.data.createdAt
+      const timeB =
+        b.type === "message" ? b.data._creationTime : b.data.createdAt
+      return timeA - timeB
+    })
+
+    return items
+  }, [uiMessages, conversationAttachments])
 
   // Show loading state while conversation is being fetched
   if (isConversationLoading) {
@@ -420,62 +620,94 @@ export const WidgetChatScreen = () => {
             </div>
           )}
 
-          {/* Messages */}
-          {uiMessages.map((message, index) => (
-            <div key={message.id}>
-              <AIMessage from={message.role === "user" ? "user" : "assistant"}>
-                {/* Typing indicator */}
-                {message.text === "" && message.status === "pending" && (
-                  <div className="flex items-end gap-2">
-                    {conversation?.status === "escalated" ? (
-                      <div className="flex size-8 items-center justify-center rounded-full bg-green-500/20">
-                        <HeadphonesIcon className="size-4 text-green-600" />
-                      </div>
-                    ) : (
-                      <div className="flex size-8 items-center justify-center rounded-full bg-primary/20">
-                        <BotIcon className="size-4 text-primary" />
-                      </div>
-                    )}
-                    <AIMessageContent>
-                      <span className="inline-flex items-center gap-1">
-                        <span className="animate-bounce [animation-delay:-0.3s] size-1.5 bg-primary rounded-full"></span>
-                        <span className="animate-bounce [animation-delay:-0.2s] size-1.5 bg-primary rounded-full"></span>
-                        <span className="animate-bounce [animation-delay:-0.1s] size-1.5 bg-primary rounded-full"></span>
-                      </span>
-                    </AIMessageContent>
-                  </div>
-                )}
-
-                {/* Message content with Markdown */}
-                {message.text && message.status !== "pending" && (
-                  <div className="flex flex-col gap-1">
-                    <AIMessageContent>
-                      <AIResponse>{message.text}</AIResponse>
-                    </AIMessageContent>
-                    {/* Status indicator for user messages */}
-                    {message.role === "user" && (
-                      <div className="flex items-center gap-1 px-1">
-                        <MessageStatus status="delivered" />
+          {/* Timeline - Messages and Attachments */}
+          {timeline.map((item, index) => {
+            if (item.type === "message") {
+              const message = item.data
+              return (
+                <div key={message.id}>
+                  <AIMessage
+                    from={message.role === "user" ? "user" : "assistant"}
+                  >
+                    {/* Typing indicator */}
+                    {message.text === "" && message.status === "pending" && (
+                      <div className="flex items-end gap-2">
+                        {conversation?.status === "escalated" ? (
+                          <div className="flex size-8 items-center justify-center rounded-full bg-green-500/20">
+                            <HeadphonesIcon className="size-4 text-green-600" />
+                          </div>
+                        ) : (
+                          <div className="flex size-8 items-center justify-center rounded-full bg-primary/20">
+                            <BotIcon className="size-4 text-primary" />
+                          </div>
+                        )}
+                        <AIMessageContent>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="animate-bounce [animation-delay:-0.3s] size-1.5 bg-primary rounded-full"></span>
+                            <span className="animate-bounce [animation-delay:-0.2s] size-1.5 bg-primary rounded-full"></span>
+                            <span className="animate-bounce [animation-delay:-0.1s] size-1.5 bg-primary rounded-full"></span>
+                          </span>
+                        </AIMessageContent>
                       </div>
                     )}
-                  </div>
-                )}
 
-                {/* Avatar for assistant messages */}
-                {message.text &&
-                  message.role === "assistant" &&
-                  (conversation?.status === "escalated" ? (
-                    <div className="flex size-8 items-center justify-center rounded-full bg-green-500/20">
-                      <HeadphonesIcon className="size-4 text-green-600" />
-                    </div>
-                  ) : (
-                    <div className="flex size-8 items-center justify-center rounded-full bg-primary/20">
-                      <BotIcon className="size-4 text-primary" />
-                    </div>
-                  ))}
-              </AIMessage>
-            </div>
-          ))}
+                    {/* Message content with Markdown */}
+                    {message.text && message.status !== "pending" && (
+                      <div className="flex flex-col gap-1">
+                        <AIMessageContent>
+                          <AIResponse>{message.text}</AIResponse>
+                        </AIMessageContent>
+                        {/* Status indicator for user messages */}
+                        {message.role === "user" && (
+                          <div className="flex items-center gap-1 px-1">
+                            <MessageStatus status="delivered" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Avatar for assistant messages */}
+                    {message.text &&
+                      message.role === "assistant" &&
+                      (conversation?.status === "escalated" ? (
+                        <div className="flex size-8 items-center justify-center rounded-full bg-green-500/20">
+                          <HeadphonesIcon className="size-4 text-green-600" />
+                        </div>
+                      ) : (
+                        <div className="flex size-8 items-center justify-center rounded-full bg-primary/20">
+                          <BotIcon className="size-4 text-primary" />
+                        </div>
+                      ))}
+                  </AIMessage>
+                </div>
+              )
+            } else {
+              // Attachment item
+              const attachment = item.data
+              return (
+                <div key={attachment.id}>
+                  <AIMessage
+                    from={
+                      attachment.uploadedBy === "user" ? "user" : "assistant"
+                    }
+                  >
+                    <AttachmentPreview attachment={attachment} />
+                    {/* Avatar for operator attachments */}
+                    {attachment.uploadedBy === "operator" &&
+                      (conversation?.status === "escalated" ? (
+                        <div className="flex size-8 items-center justify-center rounded-full bg-green-500/20">
+                          <HeadphonesIcon className="size-4 text-green-600" />
+                        </div>
+                      ) : (
+                        <div className="flex size-8 items-center justify-center rounded-full bg-primary/20">
+                          <BotIcon className="size-4 text-primary" />
+                        </div>
+                      ))}
+                  </AIMessage>
+                </div>
+              )
+            }
+          })}
 
           {/* Typing indicator */}
           {(typingStatus?.aiTyping || typingStatus?.operatorTyping) && (
@@ -593,9 +825,57 @@ export const WidgetChatScreen = () => {
             )}
           />
 
+          {/* Pending attachments preview */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-3 py-2 border-t">
+              {attachments.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  className="relative flex items-center gap-2 rounded-md border bg-muted/50 px-2 py-1 text-xs"
+                >
+                  {attachment.mimeType.startsWith("image/") ? (
+                    <ImageIcon className="size-3 text-muted-foreground" />
+                  ) : (
+                    <FileIcon className="size-3 text-muted-foreground" />
+                  )}
+                  <span className="max-w-[100px] truncate">
+                    {attachment.filename}
+                  </span>
+                  {attachment.status === "uploading" && (
+                    <Loader2Icon className="size-3 animate-spin" />
+                  )}
+                  {attachment.status === "error" && (
+                    <span className="text-destructive" title={attachment.error}>
+                      !
+                    </span>
+                  )}
+                  {attachment.status === "uploaded" && (
+                    <CheckIcon className="size-3 text-green-500" />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(attachment.id)}
+                    className="ml-1 rounded-full hover:bg-muted"
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <AIInputToolbar>
             <AIInputTools>
-              {/* Attachment button placeholder */}
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={acceptedTypes}
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {/* Attachment button */}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -604,16 +884,50 @@ export const WidgetChatScreen = () => {
                       variant="ghost"
                       className="size-8"
                       type="button"
-                      disabled
+                      disabled={
+                        conversation?.status === "resolved" || isUploading
+                      }
+                      onClick={openFilePicker}
                     >
-                      <PaperclipIcon className="size-4" />
+                      {isUploading ? (
+                        <Loader2Icon className="size-4 animate-spin" />
+                      ) : (
+                        <PaperclipIcon className="size-4" />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Attachments coming soon</p>
+                    <p>{isUploading ? "Uploading..." : "Attach files"}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              {/* Speech to text button */}
+              {isSpeechSupported && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <AIInputButton
+                        onClick={toggleListening}
+                        disabled={conversation?.status === "resolved"}
+                        className={
+                          isListening ? "text-red-500 animate-pulse" : ""
+                        }
+                      >
+                        {isListening ? (
+                          <MicOffIcon className="size-4" />
+                        ) : (
+                          <MicIcon className="size-4" />
+                        )}
+                      </AIInputButton>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        {isListening ? "Stop dictation" : "Start dictation"}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </AIInputTools>
             <AIInputSubmit
               disabled={

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect, useRef, useMemo } from "react"
+import { useSpeechToText } from "@workspace/ui/hooks/use-speech-to-text"
 import { api } from "@workspace/backend/convex/_generated/api"
 import { Id } from "@workspace/backend/convex/_generated/dataModel"
 import { Button } from "@workspace/ui/components/button"
@@ -21,6 +22,12 @@ import {
   PanelRightCloseIcon,
   MenuIcon,
   MessageSquareIcon,
+  MicIcon,
+  MicOffIcon,
+  PaperclipIcon,
+  FileIcon,
+  ImageIcon,
+  Loader2Icon,
 } from "lucide-react"
 import {
   AIConversation,
@@ -81,6 +88,13 @@ import {
   PopoverTrigger,
 } from "@workspace/ui/components/popover"
 import { ScrollArea } from "@workspace/ui/components/scroll-area"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
+import { useFileUpload } from "@/hooks/use-file-upload"
 
 const formSchema = z.object({
   message: z.string().min(1, "Message is required"),
@@ -120,6 +134,96 @@ const MessageTimestamp = ({ timestamp }: { timestamp: number }) => {
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  )
+}
+
+// Attachment display component
+const AttachmentPreview = ({
+  attachment,
+}: {
+  attachment: {
+    id: string
+    filename: string
+    mimeType: string
+    size: number
+    url?: string
+    uploadedBy: "user" | "operator"
+  }
+}) => {
+  const [isOpen, setIsOpen] = useState(false)
+  const isImage = attachment.mimeType.startsWith("image/")
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  if (!attachment.url) return null
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className="block overflow-hidden rounded-lg border bg-background hover:bg-muted/50 transition-colors text-left"
+      >
+        {isImage ? (
+          <div className="relative">
+            <img
+              src={attachment.url}
+              alt={attachment.filename}
+              className="max-h-48 max-w-full object-contain"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 p-3">
+            <FileIcon className="size-8 text-muted-foreground shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {attachment.filename}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatSize(attachment.size)}
+              </p>
+            </div>
+          </div>
+        )}
+      </button>
+
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8">
+              {attachment.filename}
+            </DialogTitle>
+          </DialogHeader>
+          {isImage ? (
+            <div className="flex items-center justify-center">
+              <img
+                src={attachment.url}
+                alt={attachment.filename}
+                className="max-w-full max-h-[70vh] object-contain"
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4 py-8">
+              <FileIcon className="size-16 text-muted-foreground" />
+              <div className="text-center">
+                <p className="font-medium">{attachment.filename}</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatSize(attachment.size)}
+                </p>
+              </div>
+              <Button asChild>
+                <a href={attachment.url} download={attachment.filename}>
+                  Download File
+                </a>
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -181,6 +285,12 @@ export const ConversationIdView = ({
     },
   )
 
+  // Fetch attachments for the conversation
+  const conversationAttachments = useQuery(
+    api.private.attachments.getByConversation,
+    conversationId ? { conversationId } : "skip",
+  )
+
   // Typing indicators
   const typingStatus = useQuery(
     api.private.typingIndicators.getTypingStatus,
@@ -235,12 +345,17 @@ export const ConversationIdView = ({
     }
   }, [conversationId, setTyping])
 
-  const { topElementRef, handleLoadMore, canLoadMore, isLoadingMore, isLoadingFirstPage } =
-    useInfiniteScroll({
-      status: messages.status,
-      loadMore: messages.loadMore,
-      loadSize: 10,
-    })
+  const {
+    topElementRef,
+    handleLoadMore,
+    canLoadMore,
+    isLoadingMore,
+    isLoadingFirstPage,
+  } = useInfiniteScroll({
+    status: messages.status,
+    loadMore: messages.loadMore,
+    loadSize: 10,
+  })
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -248,6 +363,36 @@ export const ConversationIdView = ({
       message: "",
     },
   })
+  const {
+    isSupported: isSpeechSupported,
+    isListening,
+    stopListening,
+    toggleListening,
+    clearTranscript,
+  } = useSpeechToText({
+    onResult: (transcript) => {
+      form.setValue("message", transcript, { shouldValidate: true })
+    },
+  })
+
+  // File upload
+  const {
+    attachments,
+    isUploading,
+    uploadedAttachmentIds,
+    clearAttachments,
+    openFilePicker,
+    handleFileChange,
+    fileInputRef,
+    acceptedTypes,
+    removeAttachment,
+  } = useFileUpload({
+    conversationId,
+    onError: (error) => {
+      toast.error(error)
+    },
+  })
+
   const [isEnhancing, setIsEnhancing] = useState(false)
   const [isCannedResponsesOpen, setIsCannedResponsesOpen] = useState(false)
   const [shortcutSuggestions, setShortcutSuggestions] = useState<
@@ -340,6 +485,14 @@ export const ConversationIdView = ({
   const createMessage = useMutation(api.private.messages.create)
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    // Stop speech recognition when sending
+    stopListening()
+    clearTranscript()
+
+    // Get attachment IDs before clearing
+    const attachmentIdsToSend = [...uploadedAttachmentIds]
+    clearAttachments()
+
     // Stop typing indicator
     if (lastTypingStateRef.current && conversationId) {
       lastTypingStateRef.current = false
@@ -354,6 +507,8 @@ export const ConversationIdView = ({
       await createMessage({
         conversationId,
         prompt: values.message,
+        attachmentIds:
+          attachmentIdsToSend.length > 0 ? attachmentIdsToSend : undefined,
       })
 
       form.reset()
@@ -445,6 +600,47 @@ export const ConversationIdView = ({
 
   const uiMessages = toUIMessages(messages.results ?? [])
 
+  // Create a unified timeline of messages and attachments sorted by time
+  type TimelineItem =
+    | { type: "message"; data: (typeof uiMessages)[number] }
+    | {
+        type: "attachment"
+        data: NonNullable<typeof conversationAttachments>[number]
+      }
+
+  const timeline = useMemo<TimelineItem[]>(() => {
+    const items: TimelineItem[] = []
+
+    // Add all messages to timeline
+    for (const message of uiMessages) {
+      items.push({
+        type: "message",
+        data: message,
+      })
+    }
+
+    // Add all attachments to timeline
+    if (conversationAttachments) {
+      for (const attachment of conversationAttachments) {
+        items.push({
+          type: "attachment",
+          data: attachment,
+        })
+      }
+    }
+
+    // Sort by creation time (messages have _creationTime, attachments have createdAt)
+    items.sort((a, b) => {
+      const timeA =
+        a.type === "message" ? a.data._creationTime : a.data.createdAt
+      const timeB =
+        b.type === "message" ? b.data._creationTime : b.data.createdAt
+      return timeA - timeB
+    })
+
+    return items
+  }, [uiMessages, conversationAttachments])
+
   if (conversation === undefined || messages.status === "LoadingFirstPage") {
     return <ConversationIdViewSkeleton />
   }
@@ -456,11 +652,7 @@ export const ConversationIdView = ({
         <div className="flex items-center gap-2 min-w-0">
           {isMobile && (
             <div className="flex items-center gap-1 shrink-0">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={toggleSidebar}
-              >
+              <Button size="icon" variant="ghost" onClick={toggleSidebar}>
                 <MenuIcon className="size-4" />
               </Button>
               <Button
@@ -651,53 +843,76 @@ export const ConversationIdView = ({
             isLoadingMore={isLoadingMore}
             isLoadingFirstPage={isLoadingFirstPage}
           />
-          {uiMessages.map((message) => (
-            <AIMessage
-              key={message.id}
-              role={message.role}
-              from={message.role === "user" ? "assistant" : "user"}
-            >
-              {/* Pending message indicator */}
-              {message.text === "" && message.status === "pending" && (
-                <div className="flex items-end gap-2">
-                  <AIMessageContent>
-                    <span className="inline-flex items-center font-bold gap-1">
-                      <span className="animate-bounce [animation-delay:-0.3s] size-1.5 bg-foreground/50 rounded-full"></span>
-                      <span className="animate-bounce [animation-delay:-0.2s] size-1.5 bg-foreground/50 rounded-full"></span>
-                      <span className="animate-bounce [animation-delay:-0.1s] size-1.5 bg-foreground/50 rounded-full"></span>
-                    </span>
-                  </AIMessageContent>
-                  <DicebearAvatar
-                    seed={conversation?.contactSessionId ?? "user"}
-                    size={32}
-                  />
-                </div>
-              )}
-
-              {/* Message content with markdown */}
-              {message.text && message.status !== "pending" && (
-                <div className="flex flex-col gap-1">
-                  <AIMessageContent>
-                    <AIResponse>{message.text}</AIResponse>
-                  </AIMessageContent>
-                  {/* Message status for assistant (operator) messages */}
-                  {message.role === "assistant" && (
-                    <div className="flex items-center gap-1 px-1 justify-end">
-                      <CheckCheckIcon className="size-3 text-muted-foreground" />
+          {timeline.map((item) => {
+            if (item.type === "message") {
+              const message = item.data
+              return (
+                <AIMessage
+                  key={message.id}
+                  role={message.role}
+                  from={message.role === "user" ? "assistant" : "user"}
+                >
+                  {/* Pending message indicator */}
+                  {message.text === "" && message.status === "pending" && (
+                    <div className="flex items-end gap-2">
+                      <AIMessageContent>
+                        <span className="inline-flex items-center font-bold gap-1">
+                          <span className="animate-bounce [animation-delay:-0.3s] size-1.5 bg-foreground/50 rounded-full"></span>
+                          <span className="animate-bounce [animation-delay:-0.2s] size-1.5 bg-foreground/50 rounded-full"></span>
+                          <span className="animate-bounce [animation-delay:-0.1s] size-1.5 bg-foreground/50 rounded-full"></span>
+                        </span>
+                      </AIMessageContent>
+                      <DicebearAvatar
+                        seed={conversation?.contactSessionId ?? "user"}
+                        size={32}
+                      />
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* Avatar for user messages */}
-              {message.role === "user" && (
-                <DicebearAvatar
-                  seed={conversation?.contactSessionId ?? "user"}
-                  size={32}
-                />
-              )}
-            </AIMessage>
-          ))}
+                  {/* Message content with markdown */}
+                  {message.text && message.status !== "pending" && (
+                    <div className="flex flex-col gap-1">
+                      <AIMessageContent>
+                        <AIResponse>{message.text}</AIResponse>
+                      </AIMessageContent>
+                      {/* Message status for assistant (operator) messages */}
+                      {message.role === "assistant" && (
+                        <div className="flex items-center gap-1 px-1 justify-end">
+                          <CheckCheckIcon className="size-3 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Avatar for user messages */}
+                  {message.role === "user" && (
+                    <DicebearAvatar
+                      seed={conversation?.contactSessionId ?? "user"}
+                      size={32}
+                    />
+                  )}
+                </AIMessage>
+              )
+            } else {
+              // Attachment item
+              const attachment = item.data
+              return (
+                <AIMessage
+                  key={attachment.id}
+                  from={attachment.uploadedBy === "user" ? "assistant" : "user"}
+                >
+                  <AttachmentPreview attachment={attachment} />
+                  {/* Avatar for user attachments */}
+                  {attachment.uploadedBy === "user" && (
+                    <DicebearAvatar
+                      seed={conversation?.contactSessionId ?? "user"}
+                      size={32}
+                    />
+                  )}
+                </AIMessage>
+              )
+            }
+          })}
 
           {/* User typing indicator */}
           {typingStatus?.userTyping && (
@@ -796,8 +1011,85 @@ export const ConversationIdView = ({
                 />
               )}
             />
+
+            {/* Pending attachments preview */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-3 py-2 border-t">
+                {attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="relative flex items-center gap-2 rounded-md border bg-muted/50 px-2 py-1 text-xs"
+                  >
+                    {attachment.mimeType.startsWith("image/") ? (
+                      <ImageIcon className="size-3 text-muted-foreground" />
+                    ) : (
+                      <FileIcon className="size-3 text-muted-foreground" />
+                    )}
+                    <span className="max-w-[100px] truncate">
+                      {attachment.filename}
+                    </span>
+                    {attachment.status === "uploading" && (
+                      <Loader2Icon className="size-3 animate-spin" />
+                    )}
+                    {attachment.status === "error" && (
+                      <span
+                        className="text-destructive"
+                        title={attachment.error}
+                      >
+                        !
+                      </span>
+                    )}
+                    {attachment.status === "uploaded" && (
+                      <CheckIcon className="size-3 text-green-500" />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(attachment.id)}
+                      className="ml-1 rounded-full hover:bg-muted"
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <AIInputToolbar>
               <AIInputTools>
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={acceptedTypes}
+                  multiple
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                {/* Attachment button */}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <AIInputButton
+                        disabled={
+                          conversation?.status === "resolved" || isUploading
+                        }
+                        onClick={openFilePicker}
+                      >
+                        {isUploading ? (
+                          <Loader2Icon className="animate-spin" />
+                        ) : (
+                          <PaperclipIcon />
+                        )}
+                        {isUploading ? "Uploading..." : "Attach"}
+                      </AIInputButton>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        {isUploading ? "Uploading files..." : "Attach files"}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 {/* Canned Responses Picker */}
                 <Popover
                   open={isCannedResponsesOpen}
@@ -892,6 +1184,32 @@ export const ConversationIdView = ({
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
+
+                {/* Speech-to-Text */}
+                {isSpeechSupported && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <AIInputButton
+                          onClick={toggleListening}
+                          disabled={conversation?.status === "resolved"}
+                        >
+                          {isListening ? (
+                            <MicOffIcon className="animate-pulse text-red-500" />
+                          ) : (
+                            <MicIcon />
+                          )}
+                          {isListening ? "Stop" : "Dictate"}
+                        </AIInputButton>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          {isListening ? "Stop dictation" : "Start dictation"}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </AIInputTools>
               <AIInputSubmit
                 disabled={

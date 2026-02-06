@@ -14,7 +14,11 @@ import {
   sanitizeInput,
   validateInputLength,
 } from "../lib/rateLimit"
-import { getLanguageModel, canUseAI, type AIModelSettings } from "../lib/getAIModel"
+import {
+  getLanguageModel,
+  canUseAI,
+  type AIModelSettings,
+} from "../lib/getAIModel"
 import type { LanguageModel } from "ai"
 
 function isQuotaError(error: unknown): boolean {
@@ -52,11 +56,12 @@ export const create = action({
     prompt: v.string(),
     threadId: v.string(),
     contactSessionId: v.id("contactSessions"),
+    attachmentIds: v.optional(v.array(v.id("attachments"))),
   },
   handler: async (ctx, args) => {
     enforceRateLimit(
       getIdentifier("messageCreate", args.contactSessionId),
-      RATE_LIMITS.messageCreate
+      RATE_LIMITS.messageCreate,
     )
 
     if (!validateInputLength(args.prompt, "message")) {
@@ -68,12 +73,27 @@ export const create = action({
 
     const sanitizedPrompt = sanitizeInput(args.prompt)
 
+    // Generate a messageId for attachment linking
+    const messageId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    // Link attachments to this message if any
+    if (args.attachmentIds && args.attachmentIds.length > 0) {
+      await ctx.runMutation(internal.public.attachments.linkToMessageInternal, {
+        attachmentIds: args.attachmentIds,
+        messageId,
+        contactSessionId: args.contactSessionId,
+      })
+    }
+
     const contactSession = await ctx.runQuery(
       internal.system.contactSessions.getOne,
-      { contactSessionId: args.contactSessionId }
+      { contactSessionId: args.contactSessionId },
     )
 
-    if (!contactSession || (contactSession.expiresAt && contactSession.expiresAt < Date.now())) {
+    if (
+      !contactSession ||
+      (contactSession.expiresAt && contactSession.expiresAt < Date.now())
+    ) {
       throw new ConvexError({
         message: "Invalid contact session",
         code: "INVALID_CONTACT_SESSION",
@@ -82,7 +102,7 @@ export const create = action({
 
     const conversation = await ctx.runQuery(
       internal.system.conversations.getByThreadId,
-      { threadId: args.threadId }
+      { threadId: args.threadId },
     )
 
     if (!conversation) {
@@ -105,7 +125,7 @@ export const create = action({
 
     const subscriptions = await ctx.runQuery(
       internal.system.subscriptions.getByOrganizationId,
-      { organizationId: conversation.organizationId }
+      { organizationId: conversation.organizationId },
     )
 
     const shouldTriggerAgent =
@@ -114,7 +134,7 @@ export const create = action({
     if (shouldTriggerAgent) {
       const aiSettings = (await ctx.runQuery(
         internal.private.aiModelSettings.getSettingsForAI,
-        { organizationId: conversation.organizationId }
+        { organizationId: conversation.organizationId },
       )) as AIModelSettings
 
       const aiCheck = canUseAI(aiSettings)
@@ -136,7 +156,7 @@ export const create = action({
       const model = getLanguageModel(
         aiSettings.provider,
         aiSettings.model,
-        aiSettings.apiKey
+        aiSettings.apiKey,
       ) as LanguageModel
 
       const providerNames: Record<string, string> = {
@@ -145,7 +165,8 @@ export const create = action({
         openai: "OpenAI",
         anthropic: "Anthropic",
       }
-      const providerName = providerNames[aiSettings.provider] || aiSettings.provider
+      const providerName =
+        providerNames[aiSettings.provider] || aiSettings.provider
 
       try {
         await supportAgent.generateText(
@@ -155,18 +176,21 @@ export const create = action({
             prompt: sanitizedPrompt,
             tools: { escalateConversation, resolveConversation, search },
             model,
-          }
+          },
         )
 
         if (aiSettings.provider === "platform") {
-          await ctx.runMutation(internal.private.aiModelSettings.incrementUsage, {
-            organizationId: conversation.organizationId,
-          })
+          await ctx.runMutation(
+            internal.private.aiModelSettings.incrementUsage,
+            {
+              organizationId: conversation.organizationId,
+            },
+          )
         }
       } catch (error) {
         console.error(
           `AI generation failed for organization ${conversation.organizationId}:`,
-          error
+          error,
         )
 
         await saveMessage(ctx, components.agent, {
@@ -205,7 +229,10 @@ export const getMany = query({
   handler: async (ctx, args) => {
     const contactSession = await ctx.db.get(args.contactSessionId)
 
-    if (!contactSession || (contactSession.expiresAt && contactSession.expiresAt < Date.now())) {
+    if (
+      !contactSession ||
+      (contactSession.expiresAt && contactSession.expiresAt < Date.now())
+    ) {
       throw new ConvexError({
         message: "Invalid contact session",
         code: "INVALID_CONTACT_SESSION",

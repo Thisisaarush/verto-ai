@@ -64,6 +64,7 @@ export const create = mutation({
   args: {
     prompt: v.string(),
     conversationId: v.id("conversations"),
+    attachmentIds: v.optional(v.array(v.id("attachments"))),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -107,6 +108,19 @@ export const create = mutation({
 
     if (conversation.status === "unresolved") {
       await ctx.db.patch(args.conversationId, { status: "escalated" })
+    }
+
+    // Generate a messageId for attachment linking
+    const messageId = `operator-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    // Link attachments to this message if any
+    if (args.attachmentIds && args.attachmentIds.length > 0) {
+      for (const attachmentId of args.attachmentIds) {
+        const attachment = await ctx.db.get(attachmentId)
+        if (attachment && attachment.organizationId === orgId) {
+          await ctx.db.patch(attachmentId, { messageId })
+        }
+      }
     }
 
     await saveMessage(ctx, components.agent, {

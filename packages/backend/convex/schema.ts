@@ -9,7 +9,26 @@ export const INPUT_CONSTRAINTS = {
   PHONE_MAX_LENGTH: 20,
   TAG_NAME_MAX_LENGTH: 50,
   CANNED_RESPONSE_MAX_LENGTH: 2000,
+  // Attachment constraints
+  ATTACHMENT_MAX_SIZE_BYTES: 10 * 1024 * 1024, // 10MB
+  ATTACHMENT_MAX_PER_MESSAGE: 5,
 } as const
+
+// Allowed file types for attachments
+export const ALLOWED_ATTACHMENT_TYPES = {
+  // Images
+  "image/jpeg": { ext: [".jpg", ".jpeg"], maxSize: 10 * 1024 * 1024 },
+  "image/png": { ext: [".png"], maxSize: 10 * 1024 * 1024 },
+  "image/gif": { ext: [".gif"], maxSize: 5 * 1024 * 1024 },
+  "image/webp": { ext: [".webp"], maxSize: 10 * 1024 * 1024 },
+  // Documents
+  "application/pdf": { ext: [".pdf"], maxSize: 10 * 1024 * 1024 },
+  "text/plain": { ext: [".txt"], maxSize: 1 * 1024 * 1024 },
+  // Spreadsheets
+  "text/csv": { ext: [".csv"], maxSize: 5 * 1024 * 1024 },
+} as const
+
+export type AllowedMimeType = keyof typeof ALLOWED_ATTACHMENT_TYPES
 
 // Conversation status enum
 export const conversationStatusValidator = v.union(
@@ -192,8 +211,8 @@ export default defineSchema({
     lastUpdated: v.number(),
   })
     .index("by_conversation_id", ["conversationId"])
-    
-.index("by_participant", ["conversationId", "participantId"]),
+
+    .index("by_participant", ["conversationId", "participantId"]),
 
   // AI Model Settings for organizations
   aiModelSettings: defineTable({
@@ -210,7 +229,29 @@ export default defineSchema({
     freeRequestsUsed: v.number(),
     freeRequestsLimit: v.number(),
     lastUsedAt: v.optional(v.number()),
-  })
-    .index("by_organization_id", ["organizationId"]),
+  }).index("by_organization_id", ["organizationId"]),
 
+  // Chat attachments (files attached to messages)
+  attachments: defineTable({
+    storageId: v.id("_storage"),
+    conversationId: v.id("conversations"),
+    organizationId: v.string(),
+    contactSessionId: v.optional(v.id("contactSessions")), // If uploaded by user
+    messageId: v.optional(v.string()), // Links to agent message ID
+    uploadedBy: v.union(v.literal("user"), v.literal("operator")),
+    filename: v.string(),
+    mimeType: v.string(),
+    size: v.number(), // bytes
+    url: v.optional(v.string()), // Cached URL
+    createdAt: v.number(),
+    // For abuse prevention
+    uploadIp: v.optional(v.string()),
+    scanStatus: v.optional(
+      v.union(v.literal("pending"), v.literal("clean"), v.literal("flagged")),
+    ),
+  })
+    .index("by_conversation_id", ["conversationId"])
+    .index("by_organization_id", ["organizationId"])
+    .index("by_storage_id", ["storageId"])
+    .index("by_message_id", ["messageId"]),
 })

@@ -22,7 +22,7 @@ import { chatBubbleIcon, closeIcon } from "./icons"
     // Fallback: find script tag by src
     const scripts = document.querySelectorAll('script[src*="embed"]')
     const embedScript = Array.from(scripts).find((script) =>
-      script.hasAttribute("data-organization-id")
+      script.hasAttribute("data-organization-id"),
     ) as HTMLScriptElement
 
     if (embedScript) {
@@ -111,8 +111,8 @@ import { chatBubbleIcon, closeIcon } from "./icons"
       height: 100%;
       border: none;
     `
-    // Add permissions for clipboard
-    iframe.allow = "clipboard-read; clipboard-write"
+    // Add permissions for clipboard and microphone (speech-to-text)
+    iframe.allow = "clipboard-read; clipboard-write; microphone"
 
     container.appendChild(iframe)
     document.body.appendChild(container)
