@@ -25,6 +25,7 @@ import {
   TagIcon,
   XIcon,
   SparklesIcon,
+  SmileIcon,
 } from "lucide-react"
 import { api } from "@workspace/backend/convex/_generated/api"
 import { getCountryFlagUrl, getCountryFromTimezone } from "@/lib/country-utils"
@@ -57,6 +58,9 @@ export const ConversationsPanel = ({
   const [priorityFilter, setPriorityFilter] = useState<
     "all" | "low" | "medium" | "high"
   >("all")
+  const [sentimentFilter, setSentimentFilter] = useState<
+    "all" | "positive" | "neutral" | "negative"
+  >("all")
   const [tagFilter, setTagFilter] = useState<string>("all")
 
   const statusFilter = useAtomValue(statusFilterAtom)
@@ -78,6 +82,10 @@ export const ConversationsPanel = ({
         priorityFilter === "all"
           ? undefined
           : (priorityFilter as "low" | "medium" | "high"),
+      sentiment:
+        sentimentFilter === "all"
+          ? undefined
+          : (sentimentFilter as "positive" | "neutral" | "negative"),
       tag: tagFilter === "all" ? undefined : tagFilter,
     },
     {
@@ -186,6 +194,37 @@ export const ConversationsPanel = ({
           </SelectContent>
         </Select>
 
+        {/* Sentiment Filter */}
+        <Select
+          value={sentimentFilter}
+          onValueChange={(value) =>
+            setSentimentFilter(value as typeof sentimentFilter)
+          }
+        >
+          <SelectTrigger className="h-8 border-none px-2 shadow-none ring-0 hover:bg-accent hover:text-accent-foreground focus-visible:ring-0">
+            <SelectValue>
+              <div className="flex items-center gap-2">
+                <SmileIcon className="size-4" />
+                <span>
+                  {sentimentFilter === "all"
+                    ? "All Moods"
+                    : sentimentFilter === "positive"
+                      ? "😊 Positive"
+                      : sentimentFilter === "neutral"
+                        ? "😐 Neutral"
+                        : "😤 Frustrated"}
+                </span>
+              </div>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Moods</SelectItem>
+            <SelectItem value="positive">😊 Positive</SelectItem>
+            <SelectItem value="neutral">😐 Neutral</SelectItem>
+            <SelectItem value="negative">😤 Frustrated</SelectItem>
+          </SelectContent>
+        </Select>
+
         {/* Tag Filter */}
         <div className="flex items-center gap-1">
           <Select value={tagFilter} onValueChange={setTagFilter}>
@@ -214,13 +253,14 @@ export const ConversationsPanel = ({
               ))}
             </SelectContent>
           </Select>
-          {(priorityFilter !== "all" || tagFilter !== "all") && (
+          {(priorityFilter !== "all" || sentimentFilter !== "all" || tagFilter !== "all") && (
             <Button
               size="icon"
               variant="ghost"
               className="h-8 w-8"
               onClick={() => {
                 setPriorityFilter("all")
+                setSentimentFilter("all")
                 setTagFilter("all")
               }}
             >
@@ -297,7 +337,14 @@ export const ConversationsPanel = ({
                           {conversation.lastMessage?.text}
                         </span>
                       </div>
-                      <ConversationStatusIcon status={conversation.status} />
+                      <div className="flex items-center gap-1.5">
+                        {conversation.sentiment && (
+                          <span className="text-sm" title={`Sentiment: ${conversation.sentiment}`}>
+                            {conversation.sentiment === "positive" ? "😊" : conversation.sentiment === "neutral" ? "😐" : "😤"}
+                          </span>
+                        )}
+                        <ConversationStatusIcon status={conversation.status} />
+                      </div>
                     </div>
 
                     {/* AI Summary - shown as tooltip on hover */}

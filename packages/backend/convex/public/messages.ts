@@ -217,6 +217,16 @@ export const create = action({
         prompt: sanitizedPrompt,
       })
     }
+
+    // Trigger sentiment analysis after user message
+    await ctx.scheduler.runAfter(
+      0,
+      internal.system.conversations.analyzeSentiment,
+      {
+        conversationId: conversation._id,
+        threadId: args.threadId,
+      },
+    )
   },
 })
 

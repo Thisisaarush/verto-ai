@@ -1,7 +1,14 @@
-import { internalAction, internalMutation, internalQuery } from "../_generated/server"
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server"
 import { ConvexError, v } from "convex/values"
 import { supportAgent } from "./ai/agents/supportAgent"
-import { CONVERSATION_SUMMARY_PROMPT } from "./ai/constants"
+import {
+  CONVERSATION_SUMMARY_PROMPT,
+  SENTIMENT_ANALYSIS_PROMPT,
+} from "./ai/constants"
 import { google } from "@ai-sdk/google"
 import { generateText } from "ai"
 import { internal } from "../_generated/api"
@@ -149,6 +156,77 @@ export const generateSummary = internalAction({
       }
     } catch (error) {
       console.error("Failed to generate conversation summary:", error)
+    }
+  },
+})
+
+// Internal mutation to save sentiment to a conversation
+export const saveSentiment = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    sentiment: v.union(
+      v.literal("positive"),
+      v.literal("neutral"),
+      v.literal("negative"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.conversationId, {
+      sentiment: args.sentiment,
+    })
+  },
+})
+
+// Internal action that analyzes sentiment from user messages
+export const analyzeSentiment = internalAction({
+  args: {
+    conversationId: v.id("conversations"),
+    threadId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Fetch all messages in the thread
+    const messagesResult = await ctx.runQuery(
+      internal.private.messages.getAllForThread,
+      { threadId: args.threadId },
+    )
+
+    if (!messagesResult || messagesResult.length === 0) {
+      return
+    }
+
+    // Extract only user messages for sentiment analysis
+    const userMessages = messagesResult
+      .filter((msg) => msg.message?.role === "user")
+      .map((msg) => msg.text || "")
+      .filter((text) => text.trim())
+      .join("\n---\n")
+
+    if (!userMessages.trim()) {
+      return
+    }
+
+    try {
+      const { text: sentimentResult } = await generateText({
+        model: google("gemini-2.5-flash"),
+        system: SENTIMENT_ANALYSIS_PROMPT,
+        prompt: `Analyze the sentiment of these customer messages:\n\n${userMessages}`,
+      })
+
+      const sentiment = sentimentResult.trim().toLowerCase()
+
+      // Validate the response is one of the expected values
+      if (
+        sentiment === "positive" ||
+        sentiment === "neutral" ||
+        sentiment === "negative"
+      ) {
+        await ctx.runMutation(internal.system.conversations.saveSentiment, {
+          conversationId: args.conversationId,
+          sentiment: sentiment,
+        })
+      }
+    } catch (error) {
+      console.error("Failed to analyze conversation sentiment:", error)
     }
   },
 })

@@ -193,6 +193,13 @@ export const getMany = query({
     priority: v.optional(
       v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
     ),
+    sentiment: v.optional(
+      v.union(
+        v.literal("positive"),
+        v.literal("neutral"),
+        v.literal("negative"),
+      ),
+    ),
     tag: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -237,6 +244,13 @@ export const getMany = query({
     if (args.priority) {
       filteredPage = filteredPage.filter(
         (conv) => conv.priority === args.priority,
+      )
+    }
+
+    // Apply sentiment filter in-memory
+    if (args.sentiment) {
+      filteredPage = filteredPage.filter(
+        (conv) => conv.sentiment === args.sentiment,
       )
     }
 
