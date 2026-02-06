@@ -186,6 +186,16 @@ export const getManyInternal = internalQuery({
   },
 })
 
+// Internal query to get a single conversation without auth (for system use)
+export const getOneInternal = internalQuery({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.conversationId)
+  },
+})
+
 export const getOne = query({
   args: {
     conversationId: v.id("conversations"),

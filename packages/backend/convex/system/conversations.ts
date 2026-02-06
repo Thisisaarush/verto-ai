@@ -10,11 +10,14 @@ import {
   SENTIMENT_ANALYSIS_PROMPT,
   AUTO_TAGGING_PROMPT,
   SUGGESTED_REPLIES_PROMPT,
+  AGENT_CLASSIFIER_PROMPT,
+  type AgentType,
 } from "./ai/constants"
 import { google } from "@ai-sdk/google"
 import { generateText } from "ai"
 import { internal } from "../_generated/api"
 import rag from "./ai/rag"
+import { getErrorCode } from "./aiRequestLogs"
 
 export const escalate = internalMutation({
   args: {
@@ -132,6 +135,16 @@ export const generateSummary = internalAction({
     threadId: v.string(),
   },
   handler: async (ctx, args) => {
+    // Get conversation for organizationId
+    const conversation = await ctx.runQuery(
+      internal.private.conversations.getOneInternal,
+      { conversationId: args.conversationId },
+    )
+
+    if (!conversation) {
+      return
+    }
+
     // Fetch all messages in the thread (up to 100 for summarization)
     const messagesResult = await ctx.runQuery(
       internal.private.messages.getAllForThread,
@@ -156,11 +169,25 @@ export const generateSummary = internalAction({
       return
     }
 
+    const startTime = Date.now()
+
     try {
       const { text: summary } = await generateText({
         model: google("gemini-2.5-flash"),
         system: CONVERSATION_SUMMARY_PROMPT,
         prompt: transcript,
+      })
+
+      const durationMs = Date.now() - startTime
+
+      // Log successful request
+      await ctx.runMutation(internal.system.aiRequestLogs.logSuccess, {
+        organizationId: conversation.organizationId,
+        requestType: "summarization",
+        provider: "google",
+        model: "gemini-2.5-flash",
+        durationMs,
+        conversationId: args.conversationId,
       })
 
       if (summary.trim()) {
@@ -170,6 +197,20 @@ export const generateSummary = internalAction({
         })
       }
     } catch (error) {
+      const durationMs = Date.now() - startTime
+
+      // Log failed request
+      await ctx.runMutation(internal.system.aiRequestLogs.logFailure, {
+        organizationId: conversation.organizationId,
+        requestType: "summarization",
+        provider: "google",
+        model: "gemini-2.5-flash",
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        errorCode: getErrorCode(error),
+        durationMs,
+        conversationId: args.conversationId,
+      })
+
       console.error("Failed to generate conversation summary:", error)
     }
   },
@@ -199,6 +240,16 @@ export const analyzeSentiment = internalAction({
     threadId: v.string(),
   },
   handler: async (ctx, args) => {
+    // Get conversation for organizationId
+    const conversation = await ctx.runQuery(
+      internal.system.conversations.getByThreadId,
+      { threadId: args.threadId },
+    )
+
+    if (!conversation) {
+      return
+    }
+
     // Fetch all messages in the thread
     const messagesResult = await ctx.runQuery(
       internal.private.messages.getAllForThread,
@@ -220,6 +271,8 @@ export const analyzeSentiment = internalAction({
       return
     }
 
+    const startTime = Date.now()
+
     try {
       const { text: sentimentResult } = await generateText({
         model: google("gemini-2.5-flash"),
@@ -227,7 +280,18 @@ export const analyzeSentiment = internalAction({
         prompt: `Analyze the sentiment of these customer messages:\n\n${userMessages}`,
       })
 
+      const durationMs = Date.now() - startTime
       const sentiment = sentimentResult.trim().toLowerCase()
+
+      // Log successful request
+      await ctx.runMutation(internal.system.aiRequestLogs.logSuccess, {
+        organizationId: conversation.organizationId,
+        requestType: "sentiment",
+        provider: "google",
+        model: "gemini-2.5-flash",
+        durationMs,
+        conversationId: args.conversationId,
+      })
 
       // Validate the response is one of the expected values
       if (
@@ -241,6 +305,20 @@ export const analyzeSentiment = internalAction({
         })
       }
     } catch (error) {
+      const durationMs = Date.now() - startTime
+
+      // Log failed request
+      await ctx.runMutation(internal.system.aiRequestLogs.logFailure, {
+        organizationId: conversation.organizationId,
+        requestType: "sentiment",
+        provider: "google",
+        model: "gemini-2.5-flash",
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        errorCode: getErrorCode(error),
+        durationMs,
+        conversationId: args.conversationId,
+      })
+
       console.error("Failed to analyze conversation sentiment:", error)
     }
   },
@@ -329,6 +407,8 @@ export const analyzeAndTag = internalAction({
       return
     }
 
+    const startTime = Date.now()
+
     try {
       // Replace placeholder in prompt with actual tags
       const systemPrompt = AUTO_TAGGING_PROMPT.replace(
@@ -340,6 +420,18 @@ export const analyzeAndTag = internalAction({
         model: google("gemini-2.5-flash"),
         system: systemPrompt,
         prompt: `Analyze this conversation and suggest tags and priority:\n\n${transcript}`,
+      })
+
+      const durationMs = Date.now() - startTime
+
+      // Log successful request
+      await ctx.runMutation(internal.system.aiRequestLogs.logSuccess, {
+        organizationId: args.organizationId,
+        requestType: "tagging",
+        provider: "google",
+        model: "gemini-2.5-flash",
+        durationMs,
+        conversationId: args.conversationId,
       })
 
       // Parse JSON response
@@ -365,6 +457,20 @@ export const analyzeAndTag = internalAction({
         priority: validPriority,
       })
     } catch (error) {
+      const durationMs = Date.now() - startTime
+
+      // Log failed request
+      await ctx.runMutation(internal.system.aiRequestLogs.logFailure, {
+        organizationId: args.organizationId,
+        requestType: "tagging",
+        provider: "google",
+        model: "gemini-2.5-flash",
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        errorCode: getErrorCode(error),
+        durationMs,
+        conversationId: args.conversationId,
+      })
+
       console.error("Failed to auto-tag conversation:", error)
     }
   },
@@ -378,6 +484,8 @@ export const generateSuggestedReplies = internalAction({
     organizationId: v.string(),
   },
   handler: async (ctx, args): Promise<string[]> => {
+    const startTime = Date.now()
+
     try {
       // Fetch recent messages
       const messagesResult = await ctx.runQuery(
@@ -436,6 +544,18 @@ Recent conversation context:
 ${contextTranscript}${kbContext}`,
       })
 
+      const durationMs = Date.now() - startTime
+
+      // Log successful request
+      await ctx.runMutation(internal.system.aiRequestLogs.logSuccess, {
+        organizationId: args.organizationId,
+        requestType: "suggested_replies",
+        provider: "google",
+        model: "gemini-2.5-flash",
+        durationMs,
+        conversationId: args.conversationId,
+      })
+
       // Parse JSON response - handle potential markdown wrapping
       let jsonStr = result.trim()
 
@@ -470,8 +590,159 @@ ${contextTranscript}${kbContext}`,
 
       return [] // No fallback suggestions - only show when AI provides specific ones
     } catch (error) {
+      const durationMs = Date.now() - startTime
+
+      // Log failed request
+      await ctx.runMutation(internal.system.aiRequestLogs.logFailure, {
+        organizationId: args.organizationId,
+        requestType: "suggested_replies",
+        provider: "google",
+        model: "gemini-2.5-flash",
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        errorCode: getErrorCode(error),
+        durationMs,
+        conversationId: args.conversationId,
+      })
+
       console.error("Failed to generate suggested replies:", error)
       return []
+    }
+  },
+})
+
+// =============================================================================
+// MULTI-AGENT ROUTING
+// =============================================================================
+
+// Internal mutation to update the agent type for a conversation
+export const updateAgentType = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    agentType: v.union(
+      v.literal("general"),
+      v.literal("billing"),
+      v.literal("technical"),
+      v.literal("onboarding"),
+      v.literal("sales"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.conversationId, {
+      agentType: args.agentType,
+    })
+  },
+})
+
+// Classify conversation and determine which specialist agent should handle it
+export const classifyConversation = internalAction({
+  args: {
+    firstMessage: v.string(),
+    conversationId: v.id("conversations"),
+  },
+  handler: async (ctx, args): Promise<AgentType> => {
+    // Get conversation for organizationId
+    const conversation = await ctx.runQuery(
+      internal.private.conversations.getOneInternal,
+      { conversationId: args.conversationId },
+    )
+
+    const startTime = Date.now()
+
+    try {
+      const response = await generateText({
+        model: google("gemini-2.5-flash"),
+        system: AGENT_CLASSIFIER_PROMPT,
+        prompt: `Classify this customer message and determine which specialist agent should handle it:\n\n"${args.firstMessage}"`,
+      })
+
+      const durationMs = Date.now() - startTime
+      const result = response.text.trim()
+
+      // Log successful request
+      if (conversation) {
+        await ctx.runMutation(internal.system.aiRequestLogs.logSuccess, {
+          organizationId: conversation.organizationId,
+          requestType: "classification",
+          provider: "google",
+          model: "gemini-2.5-flash",
+          durationMs,
+          conversationId: args.conversationId,
+        })
+      }
+
+      // Parse JSON response
+      let jsonStr = result
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "")
+      }
+
+      try {
+        const parsed = JSON.parse(jsonStr)
+        const agentType = parsed.agentType as AgentType
+
+        // Validate agent type
+        const validTypes: AgentType[] = [
+          "general",
+          "billing",
+          "technical",
+          "onboarding",
+          "sales",
+        ]
+        if (validTypes.includes(agentType)) {
+          // Update the conversation with the classified agent type
+          await ctx.runMutation(internal.system.conversations.updateAgentType, {
+            conversationId: args.conversationId,
+            agentType,
+          })
+          return agentType
+        }
+      } catch (parseError) {
+        console.error(
+          "Failed to parse classifier response:",
+          parseError,
+          result,
+        )
+      }
+
+      // Default to general if classification fails
+      await ctx.runMutation(internal.system.conversations.updateAgentType, {
+        conversationId: args.conversationId,
+        agentType: "general",
+      })
+      return "general"
+    } catch (error) {
+      const durationMs = Date.now() - startTime
+
+      // Enhanced error logging for classification
+      console.error(`[CLASSIFICATION ERROR] ConversationId: ${args.conversationId}`)
+      console.error(`[CLASSIFICATION ERROR] Duration: ${durationMs}ms`)
+      console.error(
+        `[CLASSIFICATION ERROR] Error type: ${error instanceof Error ? error.constructor.name : typeof error}`,
+      )
+      console.error(
+        `[CLASSIFICATION ERROR] Error message: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      if (error instanceof Error && error.stack) {
+        console.error(`[CLASSIFICATION ERROR] Stack: ${error.stack}`)
+      }
+      console.error(`[CLASSIFICATION ERROR] Full error:`, JSON.stringify(error, Object.getOwnPropertyNames(error as object), 2))
+
+      // Log failed request
+      if (conversation) {
+        await ctx.runMutation(internal.system.aiRequestLogs.logFailure, {
+          organizationId: conversation.organizationId,
+          requestType: "classification",
+          provider: "google",
+          model: "gemini-2.5-flash",
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown error",
+          errorCode: getErrorCode(error),
+          durationMs,
+          conversationId: args.conversationId,
+        })
+      }
+
+      return "general"
     }
   },
 })

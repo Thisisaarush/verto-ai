@@ -34,6 +34,20 @@ export const RATE_LIMITS = {
     maxRequests: 100,
     windowMs: 60 * 1000, // 1 minute
   },
+  // AI requests - matches Gemini free tier limit of 20 RPM
+  // We use 15 to leave buffer for retries and background tasks
+  aiRequest: {
+    maxRequests: 15,
+    windowMs: 60 * 1000, // 1 minute
+  },
+} as const
+
+// Gemini free tier limits - accurate as of the API error
+export const GEMINI_FREE_TIER = {
+  rpm: 20, // Requests per minute (actual limit)
+  appRpm: 15, // Our app limit (with buffer)
+  rpd: 1500, // Requests per day
+  resetPeriodMs: 60 * 1000, // 1 minute for RPM reset
 } as const
 
 // In-memory rate limit store (resets on function cold start)
@@ -93,6 +107,64 @@ export function enforceRateLimit(
       message: "Too many requests. Please try again later.",
       retryAfter: Math.ceil((result.resetTime - Date.now()) / 1000),
     })
+  }
+}
+
+/**
+ * Check if AI request is within rate limit for an organization
+ * Returns info about whether the request is allowed and when to retry
+ */
+export function checkAIRateLimit(organizationId: string): {
+  allowed: boolean
+  remaining: number
+  resetTime: number
+  retryAfterSeconds: number
+} {
+  const key = `ai:${organizationId}`
+  const result = checkRateLimit(key, RATE_LIMITS.aiRequest)
+
+  return {
+    ...result,
+    retryAfterSeconds: result.allowed
+      ? 0
+      : Math.ceil((result.resetTime - Date.now()) / 1000),
+  }
+}
+
+/**
+ * Get the current AI rate limit status without incrementing
+ */
+export function getAIRateLimitStatus(organizationId: string): {
+  currentUsage: number
+  limit: number
+  resetTime: number
+  isRateLimited: boolean
+  retryAfterSeconds: number
+} {
+  const key = `ai:${organizationId}`
+  const now = Date.now()
+  const existing = rateLimitStore.get(key)
+
+  if (!existing || now > existing.resetTime) {
+    return {
+      currentUsage: 0,
+      limit: RATE_LIMITS.aiRequest.maxRequests,
+      resetTime: now + RATE_LIMITS.aiRequest.windowMs,
+      isRateLimited: false,
+      retryAfterSeconds: 0,
+    }
+  }
+
+  const isRateLimited = existing.count >= RATE_LIMITS.aiRequest.maxRequests
+
+  return {
+    currentUsage: existing.count,
+    limit: RATE_LIMITS.aiRequest.maxRequests,
+    resetTime: existing.resetTime,
+    isRateLimited,
+    retryAfterSeconds: isRateLimited
+      ? Math.ceil((existing.resetTime - now) / 1000)
+      : 0,
   }
 }
 

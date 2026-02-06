@@ -553,6 +553,21 @@ export const ConversationsPanel = ({
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
+                        {/* Agent Type indicator */}
+                        {conversation.agentType && conversation.agentType !== "general" && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 capitalize">
+                                  {conversation.agentType.slice(0, 3)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{conversation.agentType} specialist</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
                         {conversation.sentiment && (
                           <span
                             className="text-sm"

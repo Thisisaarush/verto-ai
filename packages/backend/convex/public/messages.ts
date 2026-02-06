@@ -2,6 +2,7 @@ import { components, internal } from "../_generated/api"
 import { action, query } from "../_generated/server"
 import { ConvexError, v } from "convex/values"
 import { supportAgent } from "../system/ai/agents/supportAgent"
+import { getAgentByType } from "../system/ai/agents"
 import { paginationOptsValidator } from "convex/server"
 import { resolveConversation } from "../system/ai/tools/resolveConversation"
 import { escalateConversation } from "../system/ai/tools/escalateConversation"
@@ -13,13 +14,17 @@ import {
   RATE_LIMITS,
   sanitizeInput,
   validateInputLength,
+  checkAIRateLimit,
+  GEMINI_FREE_TIER,
 } from "../lib/rateLimit"
 import {
   getLanguageModel,
   canUseAI,
   type AIModelSettings,
 } from "../lib/getAIModel"
+import { getErrorCode } from "../system/aiRequestLogs"
 import type { LanguageModel } from "ai"
+import type { AgentType } from "../system/ai/constants"
 
 function isQuotaError(error: unknown): boolean {
   if (error instanceof Error) {
@@ -168,8 +173,80 @@ export const create = action({
       const providerName =
         providerNames[aiSettings.provider] || aiSettings.provider
 
+      const startTime = Date.now()
+
       try {
-        await supportAgent.generateText(
+        // Determine which agent should handle this conversation
+        let agentType: AgentType = conversation.agentType || "general"
+
+        // If this is the first message (no agent assigned yet), classify the conversation
+        if (!conversation.agentType) {
+          // Run classification in parallel with a short timeout
+          // to not delay the response too much
+          try {
+            agentType = await ctx.runAction(
+              internal.system.conversations.classifyConversation,
+              {
+                firstMessage: sanitizedPrompt,
+                conversationId: conversation._id,
+              },
+            )
+            console.log(
+              `[CLASSIFICATION] Successfully classified as: ${agentType}`,
+            )
+          } catch (classifyError) {
+            console.error(
+              `[CLASSIFICATION] Failed for conversation ${conversation._id}:`,
+            )
+            console.error(
+              `[CLASSIFICATION] Error: ${classifyError instanceof Error ? classifyError.message : String(classifyError)}`,
+            )
+            agentType = "general"
+          }
+        }
+
+        // Get the appropriate specialized agent
+        const agent = getAgentByType(agentType)
+
+        // Check AI rate limit before making the call
+        const rateLimitCheck = checkAIRateLimit(conversation.organizationId)
+        if (!rateLimitCheck.allowed) {
+          console.log(
+            `[AI RATE LIMIT] Organization ${conversation.organizationId} hit rate limit.`,
+            `Retry in ${rateLimitCheck.retryAfterSeconds}s`,
+          )
+
+          // Log the rate-limited request
+          await ctx.runMutation(internal.system.aiRequestLogs.logFailure, {
+            organizationId: conversation.organizationId,
+            requestType: "chat",
+            provider: aiSettings.provider,
+            model: aiSettings.model,
+            errorMessage: `App rate limit exceeded. limit: ${GEMINI_FREE_TIER.appRpm}, Please retry in ${rateLimitCheck.retryAfterSeconds}s`,
+            errorCode: "RATE_LIMIT",
+            durationMs: 0,
+            conversationId: conversation._id,
+          })
+
+          // Save user message and rate limit response
+          await saveMessage(ctx, components.agent, {
+            threadId: args.threadId,
+            prompt: sanitizedPrompt,
+          })
+
+          await supportAgent.saveMessage(ctx, {
+            threadId: args.threadId,
+            message: {
+              role: "assistant",
+              content:
+                `I'm currently handling many requests. Please wait ${rateLimitCheck.retryAfterSeconds} seconds before sending another message. ` +
+                "Thank you for your patience!",
+            },
+          })
+          return
+        }
+
+        await agent.generateText(
           ctx,
           { threadId: args.threadId },
           {
@@ -178,6 +255,18 @@ export const create = action({
             model,
           },
         )
+
+        const durationMs = Date.now() - startTime
+
+        // Log successful chat request
+        await ctx.runMutation(internal.system.aiRequestLogs.logSuccess, {
+          organizationId: conversation.organizationId,
+          requestType: "chat",
+          provider: aiSettings.provider,
+          model: aiSettings.model,
+          durationMs,
+          conversationId: conversation._id,
+        })
 
         if (aiSettings.provider === "platform") {
           await ctx.runMutation(
@@ -188,10 +277,40 @@ export const create = action({
           )
         }
       } catch (error) {
+        const durationMs = Date.now() - startTime
+
+        // Enhanced error logging for debugging
+        console.error(`[AI ERROR] Organization: ${conversation.organizationId}`)
+        console.error(`[AI ERROR] Provider: ${aiSettings.provider}`)
+        console.error(`[AI ERROR] Model: ${aiSettings.model}`)
+        console.error(`[AI ERROR] Duration: ${durationMs}ms`)
         console.error(
-          `AI generation failed for organization ${conversation.organizationId}:`,
-          error,
+          `[AI ERROR] Error type: ${error instanceof Error ? error.constructor.name : typeof error}`,
         )
+        console.error(
+          `[AI ERROR] Error message: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        if (error instanceof Error && error.stack) {
+          console.error(`[AI ERROR] Stack trace: ${error.stack}`)
+        }
+        // Log the full error object for inspection
+        console.error(
+          `[AI ERROR] Full error:`,
+          JSON.stringify(error, Object.getOwnPropertyNames(error as object), 2),
+        )
+
+        // Log failed chat request
+        await ctx.runMutation(internal.system.aiRequestLogs.logFailure, {
+          organizationId: conversation.organizationId,
+          requestType: "chat",
+          provider: aiSettings.provider,
+          model: aiSettings.model,
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown error",
+          errorCode: getErrorCode(error),
+          durationMs,
+          conversationId: conversation._id,
+        })
 
         await saveMessage(ctx, components.agent, {
           threadId: args.threadId,

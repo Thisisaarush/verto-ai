@@ -7,6 +7,7 @@ import { CustomizationForm } from "../components/customization-form"
 import { CannedResponsesManager } from "../components/canned-responses-manager"
 import { ConversationTagsManager } from "../components/conversation-tags-manager"
 import { AIModelSettingsManager } from "../components/ai-model-settings-manager"
+import { AILogsManager } from "../components/ai-logs-manager"
 import {
   Tabs,
   TabsContent,
@@ -42,12 +43,16 @@ export const CustomizationView = () => {
         <Tabs defaultValue="ai-model" className="w-full">
           <TabsList>
             <TabsTrigger value="ai-model">AI Model</TabsTrigger>
+            <TabsTrigger value="ai-logs">AI Logs</TabsTrigger>
             <TabsTrigger value="widget">Widget Settings</TabsTrigger>
             <TabsTrigger value="responses">Canned Responses</TabsTrigger>
             <TabsTrigger value="tags">Tags</TabsTrigger>
           </TabsList>
           <TabsContent value="ai-model" className="mt-6">
             <AIModelSettingsManager />
+          </TabsContent>
+          <TabsContent value="ai-logs" className="mt-6">
+            <AILogsManager />
           </TabsContent>
           <TabsContent value="widget" className="mt-6">
             <CustomizationForm initialData={widgetSettings} />

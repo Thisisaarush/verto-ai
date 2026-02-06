@@ -193,8 +193,9 @@ export const AIModelSettingsManager = () => {
             Free Tier Usage
           </CardTitle>
           <CardDescription>
-            Your organization gets {usageStats.freeRequestsLimit.toLocaleString()}{" "}
-            free AI requests per day, powered by Google Gemini 2.5 Flash.
+            Your organization gets{" "}
+            {usageStats.freeRequestsLimit.toLocaleString()} free AI requests per
+            day, powered by Google Gemini 2.5 Flash.
           </CardDescription>
         </CardHeader>
         <CardContent>

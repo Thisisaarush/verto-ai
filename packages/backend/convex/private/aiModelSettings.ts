@@ -175,9 +175,9 @@ export const upsert = mutation({
 
     if (existingSettings) {
       // Only update apiKey if a new one is provided (not the masked value)
-      const updateData: Record<string, unknown> = {   
+      const updateData: Record<string, unknown> = {
         provider: args.provider,
-        model: args.model,    
+        model: args.model,
         isActive: true,
       }
 

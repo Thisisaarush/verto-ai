@@ -830,6 +830,25 @@ export const ConversationIdView = ({
               {conversation.priority}
             </Badge>
           )}
+          {/* Agent Type Badge */}
+          {conversation.agentType && conversation.agentType !== "general" && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className="text-xs capitalize bg-gradient-to-r from-violet-500/10 to-purple-500/10 border-violet-500/30 text-violet-700 dark:text-violet-300"
+                  >
+                    <BotIcon className="size-3 mr-1" />
+                    {conversation.agentType}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Handled by {conversation.agentType} specialist AI</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <ConversationStatusButton
             status={conversation?.status}
             onClick={handleToggleStatus}

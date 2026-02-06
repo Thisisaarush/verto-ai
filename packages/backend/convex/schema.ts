@@ -92,6 +92,16 @@ export default defineSchema({
     // Read status tracking
     lastReadAt: v.optional(v.number()),
     lastMessageAt: v.optional(v.number()),
+    // Multi-agent routing
+    agentType: v.optional(
+      v.union(
+        v.literal("general"),
+        v.literal("billing"),
+        v.literal("technical"),
+        v.literal("onboarding"),
+        v.literal("sales"),
+      ),
+    ),
   })
     .index("by_organization_id", ["organizationId"])
     .index("by_contact_session_id", ["contactSessionId"])
@@ -259,4 +269,29 @@ export default defineSchema({
     .index("by_organization_id", ["organizationId"])
     .index("by_storage_id", ["storageId"])
     .index("by_message_id", ["messageId"]),
+
+  // AI Request Logs for tracking usage and debugging failures
+  aiRequestLogs: defineTable({
+    organizationId: v.string(),
+    requestType: v.union(
+      v.literal("chat"),
+      v.literal("sentiment"),
+      v.literal("classification"),
+      v.literal("tagging"),
+      v.literal("summarization"),
+      v.literal("suggested_replies"),
+    ),
+    status: v.union(v.literal("success"), v.literal("failed")),
+    errorMessage: v.optional(v.string()),
+    errorCode: v.optional(v.string()), // e.g., "QUOTA_EXCEEDED", "RATE_LIMIT", etc.
+    provider: v.string(),
+    model: v.string(),
+    durationMs: v.optional(v.number()),
+    conversationId: v.optional(v.id("conversations")),
+    createdAt: v.number(),
+  })
+    .index("by_organization_id", ["organizationId"])
+    .index("by_organization_and_time", ["organizationId", "createdAt"])
+    .index("by_status", ["organizationId", "status"])
+    .index("by_type", ["organizationId", "requestType"]),
 })
