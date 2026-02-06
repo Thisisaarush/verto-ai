@@ -8,6 +8,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@workspace/ui/components/tooltip"
 import { usePaginatedQuery, useQuery } from "convex/react"
 import {
   ListIcon,
@@ -18,6 +24,7 @@ import {
   FlagIcon,
   TagIcon,
   XIcon,
+  SparklesIcon,
 } from "lucide-react"
 import { api } from "@workspace/backend/convex/_generated/api"
 import { getCountryFlagUrl, getCountryFromTimezone } from "@/lib/country-utils"
@@ -91,7 +98,7 @@ export const ConversationsPanel = ({
   })
 
   return (
-    <div className="flex h-full w-full flex-col bg-background text-sidebar-foreground"> 
+    <div className="flex h-full w-full flex-col bg-background text-sidebar-foreground">
       {isMobile && (
         <div className="flex items-center gap-2 border-b px-3 py-2.5 shrink-0">
           <SidebarTrigger />
@@ -241,7 +248,8 @@ export const ConversationsPanel = ({
                 : undefined
 
               return (
-                <Link onClick={onConversationClick}
+                <Link
+                  onClick={onConversationClick}
                   href={`/conversations/${conversation._id}`}
                   key={conversation._id}
                   className={cn(
@@ -291,6 +299,25 @@ export const ConversationsPanel = ({
                       </div>
                       <ConversationStatusIcon status={conversation.status} />
                     </div>
+
+                    {/* AI Summary - shown as tooltip on hover */}
+                    {conversation.summary && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="mt-1 flex items-center gap-1 cursor-help">
+                              <SparklesIcon className="size-3 shrink-0 text-violet-500" />
+                              <span className="text-xs text-violet-500 font-medium">
+                                AI Summary
+                              </span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-xs">
+                            <p className="text-sm">{conversation.summary}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </div>
                 </Link>
               )

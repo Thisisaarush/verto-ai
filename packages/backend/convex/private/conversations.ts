@@ -4,7 +4,7 @@ import { supportAgent } from "../system/ai/agents/supportAgent"
 import { MessageDoc } from "@convex-dev/agent"
 import { paginationOptsValidator, PaginationResult } from "convex/server"
 import { Doc } from "../_generated/dataModel"
-import { internal } from "../_generated/api"
+import { api, internal } from "../_generated/api"
 
 export const updateStatus = mutation({
   args: {
@@ -68,6 +68,21 @@ export const updateStatus = mutation({
     }
 
     await ctx.db.patch(args.conversationId, updates)
+
+    // Generate AI summary when conversation is resolved or escalated
+    if (
+      (args.status === "resolved" || args.status === "escalated") &&
+      !conversation.summary
+    ) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.system.conversations.generateSummary,
+        {
+          conversationId: args.conversationId,
+          threadId: conversation.threadId,
+        },
+      )
+    }
   },
 })
 

@@ -87,6 +87,8 @@ export default defineSchema({
         v.literal("negative"),
       ),
     ),
+    summary: v.optional(v.string()),
+    summarizedAt: v.optional(v.number()),
   })
     .index("by_organization_id", ["organizationId"])
     .index("by_contact_session_id", ["contactSessionId"])

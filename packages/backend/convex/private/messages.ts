@@ -1,5 +1,5 @@
 import { components, internal } from "../_generated/api"
-import { action, mutation, query } from "../_generated/server"
+import { action, internalQuery, mutation, query } from "../_generated/server"
 import { ConvexError, v } from "convex/values"
 import { supportAgent } from "../system/ai/agents/supportAgent"
 import { paginationOptsValidator } from "convex/server"
@@ -181,5 +181,20 @@ export const getMany = query({
     })
 
     return paginated
+  },
+})
+
+// Internal query for summarization — fetches all messages in a thread
+export const getAllForThread = internalQuery({
+  args: {
+    threadId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const messages = await supportAgent.listMessages(ctx, {
+      threadId: args.threadId,
+      paginationOpts: { numItems: 100, cursor: null },
+    })
+
+    return messages.page
   },
 })

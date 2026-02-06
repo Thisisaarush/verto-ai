@@ -6,7 +6,13 @@ import { Id } from "@workspace/backend/convex/_generated/dataModel"
 import { Button } from "@workspace/ui/components/button"
 import { DicebearAvatar } from "@workspace/ui/components/dicebear-avatar"
 import { useQuery } from "convex/react"
-import { ClockIcon, GlobeIcon, MailIcon, MonitorIcon } from "lucide-react"
+import {
+  ClockIcon,
+  GlobeIcon,
+  MailIcon,
+  MonitorIcon,
+  SparklesIcon,
+} from "lucide-react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import React, { useMemo } from "react"
@@ -40,7 +46,17 @@ export const ContactPanel = () => {
       ? {
           conversationId,
         }
-      : "skip"
+      : "skip",
+  )
+
+  // Fetch conversation data for AI summary
+  const conversation = useQuery(
+    api.private.conversations.getOne,
+    conversationId
+      ? {
+          conversationId,
+        }
+      : "skip",
   )
 
   const parseUserAgent = useMemo(() => {
@@ -199,6 +215,19 @@ export const ContactPanel = () => {
       </div>
 
       <div>
+        {/* AI Summary */}
+        {conversation?.summary && (
+          <div className="border-b px-5 py-4">
+            <div className="flex items-center gap-2 mb-2">
+              <SparklesIcon className="size-4 text-violet-500" />
+              <span className="text-sm font-medium">AI Summary</span>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {conversation.summary}
+            </p>
+          </div>
+        )}
+
         {contactSession?.metadata && (
           <Accordion className="w-full rounded-none border-y" type="multiple">
             {accordionSections.map((section) => {
