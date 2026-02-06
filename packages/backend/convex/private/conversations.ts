@@ -1,4 +1,4 @@
-import { mutation, query } from "../_generated/server"
+import { action, mutation, query } from "../_generated/server"
 import { ConvexError, v } from "convex/values"
 import { supportAgent } from "../system/ai/agents/supportAgent"
 import { MessageDoc } from "@convex-dev/agent"
@@ -125,6 +125,43 @@ export const updatePriority = mutation({
 
     await ctx.db.patch(args.conversationId, {
       priority: args.priority,
+    })
+  },
+})
+
+// Mark conversation as read by operator
+export const markAsRead = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      })
+    }
+
+    const orgId = identity.orgId as string
+    if (!orgId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authorized",
+      })
+    }
+
+    const conversation = await ctx.db.get(args.conversationId)
+    if (!conversation) {
+      return // Silently fail for non-existent conversations
+    }
+
+    if (conversation.organizationId !== orgId) {
+      return // Silently fail for unauthorized
+    }
+
+    await ctx.db.patch(args.conversationId, {
+      lastReadAt: Date.now(),
     })
   },
 })
@@ -299,5 +336,58 @@ export const getMany = query({
       ...conversations,
       page: validConversations,
     }
+  },
+})
+
+// Get AI-suggested replies for a conversation
+export const getSuggestedReplies = action({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+  handler: async (ctx, args): Promise<string[]> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authenticated",
+      })
+    }
+
+    const orgId = identity.orgId as string
+    if (!orgId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "User not authorized",
+      })
+    }
+
+    // Get conversation to verify access and get threadId
+    const conversation = await ctx.runQuery(api.private.conversations.getOne, {
+      conversationId: args.conversationId,
+    })
+
+    if (!conversation) {
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Conversation not found",
+      })
+    }
+
+    // Skip for resolved conversations
+    if (conversation.status === "resolved") {
+      return []
+    }
+
+    // Generate suggested replies using the internal action
+    const suggestions = await ctx.runAction(
+      internal.system.conversations.generateSuggestedReplies,
+      {
+        conversationId: args.conversationId,
+        threadId: conversation.threadId,
+        organizationId: orgId,
+      },
+    )
+
+    return suggestions
   },
 })

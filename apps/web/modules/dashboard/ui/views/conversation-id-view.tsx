@@ -28,6 +28,7 @@ import {
   FileIcon,
   ImageIcon,
   Loader2Icon,
+  RefreshCwIcon,
 } from "lucide-react"
 import {
   AIConversation,
@@ -273,6 +274,9 @@ export const ConversationIdView = ({
     api.private.conversationTags.removeFromConversation,
   )
 
+  // Mark conversation as read
+  const markAsRead = useMutation(api.private.conversations.markAsRead)
+
   const messages = useThreadMessages(
     api.private.messages.getMany,
     conversation?.threadId
@@ -284,6 +288,14 @@ export const ConversationIdView = ({
       initialNumItems: 10,
     },
   )
+
+  // Mark as read when conversation is opened or new messages arrive
+  const messagesCount = messages.results?.length ?? 0
+  useEffect(() => {
+    if (conversationId && conversation) {
+      markAsRead({ conversationId })
+    }
+  }, [conversationId, conversation, messagesCount, markAsRead])
 
   // Fetch attachments for the conversation
   const conversationAttachments = useQuery(
@@ -405,6 +417,11 @@ export const ConversationIdView = ({
   >([])
   const [showShortcutSuggestions, setShowShortcutSuggestions] = useState(false)
 
+  // AI Suggested Replies
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+  const getSuggestedReplies = useAction(api.private.conversations.getSuggestedReplies)
+
   const enhanceResponse = useAction(api.private.messages.enhanceResponse)
 
   // Handle /shortcut detection for canned responses
@@ -464,6 +481,106 @@ export const ConversationIdView = ({
     } finally {
       setIsEnhancing(false)
     }
+  }
+
+  // Track the current request to prevent stale updates
+  const suggestionRequestIdRef = useRef<number>(0)
+
+  // Load AI suggestions when a new widget message arrives
+  const loadAiSuggestions = useCallback(async () => {
+    if (!conversationId || conversation?.status === "resolved") {
+      setAiSuggestions([])
+      return
+    }
+
+    // Increment request ID to invalidate any in-flight requests
+    const requestId = ++suggestionRequestIdRef.current
+
+    setIsLoadingSuggestions(true)
+    try {
+      const suggestions = await getSuggestedReplies({ conversationId })
+      
+      // Only update if this is still the current request
+      if (requestId !== suggestionRequestIdRef.current) {
+        return // Stale request, ignore results
+      }
+      
+      // Only update if we got actual suggestions
+      if (suggestions && suggestions.length > 0) {
+        setAiSuggestions(suggestions)
+      } else {
+        setAiSuggestions([])
+      }
+    } catch (error) {
+      // Ignore connection lost errors (happens when switching conversations)
+      if (
+        error instanceof Error &&
+        error.message.includes("Connection lost")
+      ) {
+        return
+      }
+      console.error("Failed to load AI suggestions:", error)
+    } finally {
+      // Only clear loading state if this is still the current request
+      if (requestId === suggestionRequestIdRef.current) {
+        setIsLoadingSuggestions(false)
+      }
+    }
+  }, [conversationId, conversation?.status, getSuggestedReplies])
+
+  // Track messages to detect new ones from widget (user)
+  const lastSeenMessageTimeRef = useRef<number | null>(null)
+  const prevConversationIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const messagesList = messages.results ?? []
+
+    // Skip if messages haven't loaded yet
+    if (messages.status === "LoadingFirstPage" || messagesList.length === 0) {
+      return
+    }
+
+    // Reset on conversation change
+    if (conversationId !== prevConversationIdRef.current) {
+      prevConversationIdRef.current = conversationId
+      // Cancel any in-flight suggestion requests
+      suggestionRequestIdRef.current++
+      setIsLoadingSuggestions(false)
+      // Get the latest message time
+      const latestTime = Math.max(...messagesList.map((m) => m._creationTime))
+      lastSeenMessageTimeRef.current = latestTime
+      setAiSuggestions([]) // Clear suggestions when switching conversations
+      return
+    }
+
+    // Initialize on first load
+    if (lastSeenMessageTimeRef.current === null) {
+      const latestTime = Math.max(...messagesList.map((m) => m._creationTime))
+      lastSeenMessageTimeRef.current = latestTime
+      return
+    }
+
+    // Find new messages by comparing timestamps
+    const newUserMessages = messagesList.filter(
+      (msg) =>
+        msg._creationTime > lastSeenMessageTimeRef.current! &&
+        msg.message?.role === "user"
+    )
+
+    if (newUserMessages.length > 0 && conversation?.status !== "resolved") {
+      // New widget message arrived - fetch suggestions
+      setAiSuggestions([]) // Clear old suggestions first
+      loadAiSuggestions()
+    }
+
+    // Update last seen time to the latest message
+    const latestTime = Math.max(...messagesList.map((m) => m._creationTime))
+    lastSeenMessageTimeRef.current = latestTime
+  }, [messages.results, messages.status, conversationId, conversation?.status, loadAiSuggestions])
+
+  const handleUseSuggestion = (suggestion: string) => {
+    form.setValue("message", suggestion, { shouldValidate: true })
+    setAiSuggestions([]) // Clear after using
   }
 
   const handleInsertCannedResponse = async (
@@ -956,6 +1073,38 @@ export const ConversationIdView = ({
             ))}
           </div>
         )}
+
+        {/* AI Suggested Replies - Only show when loading or have suggestions */}
+        {conversation?.status !== "resolved" &&
+          !showShortcutSuggestions &&
+          (isLoadingSuggestions || aiSuggestions.length > 0) && (
+            <div className="flex items-center gap-2 mb-2 overflow-x-auto pb-1">
+              <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
+                <Wand2Icon className="size-3" />
+                AI:
+              </span>
+              {isLoadingSuggestions ? (
+                <div className="flex items-center gap-2">
+                  <Loader2Icon className="size-3 animate-spin text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    Thinking...
+                  </span>
+                </div>
+              ) : (
+                aiSuggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => handleUseSuggestion(suggestion)}
+                    className="shrink-0 rounded-full border bg-muted/50 px-3 py-1 text-xs hover:bg-accent hover:border-primary transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
         <Form {...form}>
           <AIInput onSubmit={form.handleSubmit(onSubmit)}>
             <FormField

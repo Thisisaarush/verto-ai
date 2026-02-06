@@ -218,6 +218,11 @@ export const create = action({
       })
     }
 
+    // Update lastMessageAt for unread tracking
+    await ctx.runMutation(internal.system.conversations.updateLastMessageAt, {
+      conversationId: conversation._id,
+    })
+
     // Trigger sentiment analysis after user message
     // Delay by 5 seconds to avoid rate limiting (Google's 15 RPM limit)
     await ctx.scheduler.runAfter(

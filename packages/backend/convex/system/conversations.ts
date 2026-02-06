@@ -9,10 +9,12 @@ import {
   CONVERSATION_SUMMARY_PROMPT,
   SENTIMENT_ANALYSIS_PROMPT,
   AUTO_TAGGING_PROMPT,
+  SUGGESTED_REPLIES_PROMPT,
 } from "./ai/constants"
 import { google } from "@ai-sdk/google"
 import { generateText } from "ai"
 import { internal } from "../_generated/api"
+import rag from "./ai/rag"
 
 export const escalate = internalMutation({
   args: {
@@ -94,6 +96,18 @@ export const getByThreadId = internalQuery({
       .withIndex("by_thread_id", (q) => q.eq("threadId", args.threadId))
       .unique()
     return conversation
+  },
+})
+
+// Internal mutation to update lastMessageAt when a new message is received
+export const updateLastMessageAt = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.conversationId, {
+      lastMessageAt: Date.now(),
+    })
   },
 })
 
@@ -352,6 +366,112 @@ export const analyzeAndTag = internalAction({
       })
     } catch (error) {
       console.error("Failed to auto-tag conversation:", error)
+    }
+  },
+})
+
+// Internal action that generates AI suggested replies for agents
+export const generateSuggestedReplies = internalAction({
+  args: {
+    conversationId: v.id("conversations"),
+    threadId: v.string(),
+    organizationId: v.string(),
+  },
+  handler: async (ctx, args): Promise<string[]> => {
+    try {
+      // Fetch recent messages
+      const messagesResult = await ctx.runQuery(
+        internal.private.messages.getAllForThread,
+        { threadId: args.threadId },
+      )
+
+      if (!messagesResult || messagesResult.length === 0) {
+        return []
+      }
+
+      // Get the latest user message (this is what we're responding to)
+      const latestUserMsg = messagesResult
+        .filter((msg) => msg.message?.role === "user")
+        .pop()
+
+      if (!latestUserMsg?.text?.trim()) {
+        return []
+      }
+
+      // Build minimal context (last 4 messages for context)
+      const recentMessages = messagesResult.slice(-4)
+      const contextTranscript = recentMessages
+        .map((msg) => {
+          const role = msg.message?.role === "user" ? "Customer" : "Agent"
+          const text = msg.text || ""
+          return `${role}: ${text}`
+        })
+        .filter((line) => line.includes(": ") && !line.endsWith(": "))
+        .join("\n")
+
+      let kbContext = ""
+
+      // Search KB based on the latest user message
+      try {
+        const searchResult = await rag.search(ctx, {
+          namespace: args.organizationId,
+          query: latestUserMsg.text,
+          limit: 3,
+        })
+
+        if (searchResult.text && searchResult.text.trim()) {
+          kbContext = `\n\nRelevant knowledge base info:\n${searchResult.text.slice(0, 400)}`
+        }
+      } catch {
+        // Silently continue without KB context if search fails
+      }
+
+      const { text: result } = await generateText({
+        model: google("gemini-2.5-flash"),
+        system: SUGGESTED_REPLIES_PROMPT,
+        prompt: `LATEST CUSTOMER MESSAGE TO RESPOND TO:
+"${latestUserMsg.text}"
+
+Recent conversation context:
+${contextTranscript}${kbContext}`,
+      })
+
+      // Parse JSON response - handle potential markdown wrapping
+      let jsonStr = result.trim()
+
+      // Remove markdown code blocks if present
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "")
+      }
+
+      try {
+        const suggestions = JSON.parse(jsonStr)
+
+        // Validate it's an array of strings
+        if (
+          Array.isArray(suggestions) &&
+          suggestions.length > 0 &&
+          suggestions.every((s) => typeof s === "string")
+        ) {
+          return suggestions.slice(0, 3) // Max 3 suggestions
+        }
+      } catch (parseError) {
+        console.error("Failed to parse suggestions JSON:", parseError, jsonStr)
+      }
+
+      // Fallback: try to extract any quoted strings from the response
+      const quotedStrings = jsonStr.match(/"([^"]+)"/g)
+      if (quotedStrings && quotedStrings.length > 0) {
+        return quotedStrings
+          .slice(0, 3)
+          .map((s) => s.replace(/"/g, ""))
+          .filter((s) => s.length > 5 && s.length < 150)
+      }
+
+      return [] // No fallback suggestions - only show when AI provides specific ones
+    } catch (error) {
+      console.error("Failed to generate suggested replies:", error)
+      return []
     }
   },
 })

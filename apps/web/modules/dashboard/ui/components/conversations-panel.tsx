@@ -253,7 +253,9 @@ export const ConversationsPanel = ({
               ))}
             </SelectContent>
           </Select>
-          {(priorityFilter !== "all" || sentimentFilter !== "all" || tagFilter !== "all") && (
+          {(priorityFilter !== "all" ||
+            sentimentFilter !== "all" ||
+            tagFilter !== "all") && (
             <Button
               size="icon"
               variant="ghost"
@@ -287,6 +289,12 @@ export const ConversationsPanel = ({
                 ? getCountryFlagUrl(country.code)
                 : undefined
 
+              // Check if conversation has unread messages
+              const isUnread =
+                conversation.lastMessageAt &&
+                (!conversation.lastReadAt ||
+                  conversation.lastMessageAt > conversation.lastReadAt)
+
               return (
                 <Link
                   onClick={onConversationClick}
@@ -296,6 +304,7 @@ export const ConversationsPanel = ({
                     "flex relative cursor-pointer items-start gap-3 border-b p-4 py-5 text-sm leading-tight hover:bg-accent hover:text-accent-foreground",
                     pathname === `/conversations/${conversation._id}` &&
                       "bg-accent text-accent-foreground",
+                    isUnread && "bg-blue-50/50 dark:bg-blue-950/20",
                   )}
                 >
                   <div
@@ -314,7 +323,15 @@ export const ConversationsPanel = ({
                   />
                   <div className="flex-1">
                     <div className="flex w-full items-center gap-2">
-                      <span className="truncate font-bold">
+                      {isUnread && (
+                        <span className="size-2 rounded-full bg-blue-500 shrink-0" />
+                      )}
+                      <span
+                        className={cn(
+                          "truncate font-bold",
+                          isUnread && "text-blue-600 dark:text-blue-400",
+                        )}
+                      >
                         {conversation.contactSession?.name}
                       </span>
                       <span className="ml-auto shrink-0 text-muted-foreground text-xs">
@@ -339,8 +356,15 @@ export const ConversationsPanel = ({
                       </div>
                       <div className="flex items-center gap-1.5">
                         {conversation.sentiment && (
-                          <span className="text-sm" title={`Sentiment: ${conversation.sentiment}`}>
-                            {conversation.sentiment === "positive" ? "😊" : conversation.sentiment === "neutral" ? "😐" : "😤"}
+                          <span
+                            className="text-sm"
+                            title={`Sentiment: ${conversation.sentiment}`}
+                          >
+                            {conversation.sentiment === "positive"
+                              ? "😊"
+                              : conversation.sentiment === "neutral"
+                                ? "😐"
+                                : "😤"}
                           </span>
                         )}
                         <ConversationStatusIcon status={conversation.status} />
