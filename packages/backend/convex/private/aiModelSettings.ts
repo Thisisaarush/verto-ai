@@ -6,7 +6,16 @@ import {
   internalMutation,
 } from "../_generated/server"
 
-const FREE_REQUESTS_LIMIT = 100
+/**
+ * Google Gemini 2.5 Flash Free Tier Limits:
+ * - 15 RPM (requests per minute)
+ * - 1,500 RPD (requests per day)
+ * - 1,000,000 TPM (tokens per minute)
+ *
+ * We set a conservative daily limit per organization to share the free tier
+ * across all platform users.
+ */
+const FREE_REQUESTS_LIMIT = 1500 // Google's daily limit for Gemini 2.5 Flash free tier
 
 export const AI_PROVIDERS = {
   platform: {

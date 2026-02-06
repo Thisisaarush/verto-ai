@@ -57,7 +57,8 @@ interface ProviderConfig {
 const PROVIDERS: Record<Provider, ProviderConfig> = {
   platform: {
     name: "Platform Default",
-    description: "Use our default AI model (free tier included)",
+    description:
+      "Use Google Gemini 2.5 Flash with 1,500 free requests/day and 15 requests/minute.",
     models: [
       { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", isDefault: true },
     ],
@@ -65,7 +66,8 @@ const PROVIDERS: Record<Provider, ProviderConfig> = {
   },
   google: {
     name: "Google AI",
-    description: "Google's Gemini models",
+    description:
+      "Use your own Google API key for higher limits and more models.",
     models: [
       { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", isDefault: true },
       { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", isDefault: false },
@@ -191,16 +193,17 @@ export const AIModelSettingsManager = () => {
             Free Tier Usage
           </CardTitle>
           <CardDescription>
-            Your organization gets {usageStats.freeRequestsLimit} free AI
-            requests
+            Your organization gets {usageStats.freeRequestsLimit.toLocaleString()}{" "}
+            free AI requests per day, powered by Google Gemini 2.5 Flash.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Requests used</span>
+              <span className="text-muted-foreground">Daily requests used</span>
               <span className="font-medium">
-                {usageStats.freeRequestsUsed} / {usageStats.freeRequestsLimit}
+                {usageStats.freeRequestsUsed.toLocaleString()} /{" "}
+                {usageStats.freeRequestsLimit.toLocaleString()}
               </span>
             </div>
             <Progress value={usageStats.percentUsed} className="h-2" />
@@ -209,18 +212,25 @@ export const AIModelSettingsManager = () => {
                 <>
                   <CheckCircleIcon className="size-4 text-green-500" />
                   <span className="text-muted-foreground">
-                    {usageStats.freeRequestsRemaining} requests remaining
+                    {usageStats.freeRequestsRemaining.toLocaleString()} requests
+                    remaining today
                   </span>
                 </>
               ) : (
                 <>
                   <AlertCircleIcon className="size-4 text-amber-500" />
                   <span className="text-muted-foreground">
-                    Free tier exhausted. Add your own API key to continue.
+                    Daily limit reached. Add your own API key or wait until
+                    tomorrow.
                   </span>
                 </>
               )}
             </div>
+            <p className="text-xs text-muted-foreground border-t pt-3">
+              Free tier uses Google&apos;s Gemini 2.5 Flash with limits of 15
+              requests/minute and 1,500 requests/day. For higher limits, add
+              your own API key.
+            </p>
           </div>
         </CardContent>
       </Card>

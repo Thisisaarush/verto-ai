@@ -219,14 +219,30 @@ export const create = action({
     }
 
     // Trigger sentiment analysis after user message
+    // Delay by 5 seconds to avoid rate limiting (Google's 15 RPM limit)
     await ctx.scheduler.runAfter(
-      0,
+      5000,
       internal.system.conversations.analyzeSentiment,
       {
         conversationId: conversation._id,
         threadId: args.threadId,
       },
     )
+
+    // Trigger auto-tagging and priority analysis after user message
+    // Only run if conversation doesn't already have tags or priority set
+    // Delay by 10 seconds to stagger API calls
+    if (!conversation.tags?.length && !conversation.priority) {
+      await ctx.scheduler.runAfter(
+        10000,
+        internal.system.conversations.analyzeAndTag,
+        {
+          conversationId: conversation._id,
+          threadId: args.threadId,
+          organizationId: conversation.organizationId,
+        },
+      )
+    }
   },
 })
 

@@ -61,7 +61,8 @@ export async function getAISettingsForOrg(
   ctx: QueryCtx,
   organizationId: string,
 ): Promise<AIModelSettings> {
-  const FREE_REQUESTS_LIMIT = 100
+  // Google Gemini 2.5 Flash free tier: 15 RPM, 1500 RPD, 1M TPM
+  const FREE_REQUESTS_LIMIT = 1500
 
   const settings = await ctx.db
     .query("aiModelSettings")
