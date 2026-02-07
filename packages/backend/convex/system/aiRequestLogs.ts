@@ -268,7 +268,10 @@ export const getStats = internalQuery({
       if (!byType[log.requestType]) {
         byType[log.requestType] = { success: 0, failed: 0 }
       }
-      byType[log.requestType][log.status]++
+      const entry = byType[log.requestType]
+      if (entry) {
+        entry[log.status]++
+      }
     })
 
     // Error breakdown
