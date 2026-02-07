@@ -294,4 +294,32 @@ export default defineSchema({
     .index("by_organization_and_time", ["organizationId", "createdAt"])
     .index("by_status", ["organizationId", "status"])
     .index("by_type", ["organizationId", "requestType"]),
+
+  // Organization API Keys for REST API access
+  apiKeys: defineTable({
+    organizationId: v.string(),
+    name: v.string(), // User-friendly name for the key
+    keyHash: v.string(), // SHA-256 hash of the API key (we never store the key itself)
+    keyPrefix: v.string(), // First 8 chars of key for identification (e.g., "verto_pk_")
+    permissions: v.array(
+      v.union(
+        v.literal("conversations:read"),
+        v.literal("conversations:write"),
+        v.literal("messages:read"),
+        v.literal("messages:write"),
+        v.literal("analytics:read"),
+        v.literal("contacts:read"),
+        v.literal("contacts:write"),
+      ),
+    ),
+    lastUsedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()), // Optional expiry
+    isActive: v.boolean(),
+    createdBy: v.string(), // Clerk user ID
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_organization_id", ["organizationId"])
+    .index("by_key_hash", ["keyHash"])
+    .index("by_organization_and_active", ["organizationId", "isActive"]),
 })

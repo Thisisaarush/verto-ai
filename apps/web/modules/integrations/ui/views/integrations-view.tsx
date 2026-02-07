@@ -20,6 +20,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import { createScript } from "../../utils"
 import { MobileHeader } from "@/modules/dashboard/ui/components/mobile-header"
+import { ApiKeysManager } from "../components/api-keys-manager"
 
 export const IntegrationsView = () => {
   const { organization } = useOrganization()
@@ -121,6 +122,11 @@ export const IntegrationsView = () => {
               </div>
             </div>
           </div>
+
+          <Separator className="my-8" />
+
+          {/* API Keys Section */}
+          <ApiKeysManager />
         </div>
       </div>
     </>

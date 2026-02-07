@@ -16,6 +16,7 @@ import type * as lib_logger from "../lib/logger.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as private_aiModelSettings from "../private/aiModelSettings.js";
 import type * as private_aiRequestLogs from "../private/aiRequestLogs.js";
+import type * as private_apiKeys from "../private/apiKeys.js";
 import type * as private_attachments from "../private/attachments.js";
 import type * as private_cannedResponses from "../private/cannedResponses.js";
 import type * as private_contactSessions from "../private/contactSessions.js";
@@ -46,6 +47,7 @@ import type * as system_ai_tools_escalateConversation from "../system/ai/tools/e
 import type * as system_ai_tools_resolveConversation from "../system/ai/tools/resolveConversation.js";
 import type * as system_ai_tools_search from "../system/ai/tools/search.js";
 import type * as system_aiRequestLogs from "../system/aiRequestLogs.js";
+import type * as system_api from "../system/api.js";
 import type * as system_contactSessions from "../system/contactSessions.js";
 import type * as system_conversations from "../system/conversations.js";
 import type * as system_emails from "../system/emails.js";
@@ -76,6 +78,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimit": typeof lib_rateLimit;
   "private/aiModelSettings": typeof private_aiModelSettings;
   "private/aiRequestLogs": typeof private_aiRequestLogs;
+  "private/apiKeys": typeof private_apiKeys;
   "private/attachments": typeof private_attachments;
   "private/cannedResponses": typeof private_cannedResponses;
   "private/contactSessions": typeof private_contactSessions;
@@ -106,6 +109,7 @@ declare const fullApi: ApiFromModules<{
   "system/ai/tools/resolveConversation": typeof system_ai_tools_resolveConversation;
   "system/ai/tools/search": typeof system_ai_tools_search;
   "system/aiRequestLogs": typeof system_aiRequestLogs;
+  "system/api": typeof system_api;
   "system/contactSessions": typeof system_contactSessions;
   "system/conversations": typeof system_conversations;
   "system/emails": typeof system_emails;
