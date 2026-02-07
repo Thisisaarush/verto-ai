@@ -16,8 +16,8 @@ function parseRateLimitFromError(errorMessage: string | undefined): {
   const retryMatch = errorMessage.match(/retry in\s*([\d.]+)s/i)
 
   return {
-    limit: limitMatch ? parseInt(limitMatch[1], 10) : undefined,
-    retryAfterSeconds: retryMatch ? parseFloat(retryMatch[1]) : undefined,
+    limit: limitMatch?.[1] ? parseInt(limitMatch[1], 10) : undefined,
+    retryAfterSeconds: retryMatch?.[1] ? parseFloat(retryMatch[1]) : undefined,
   }
 }
 
