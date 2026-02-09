@@ -85,6 +85,17 @@ import { useSpeechToText } from "@workspace/ui/hooks/use-speech-to-text"
 import { formatDistanceToNow, format } from "date-fns"
 import { useFileUpload } from "@/hooks/use-file-upload"
 import { FileIcon, ImageIcon, Loader2Icon } from "lucide-react"
+import {
+  parseMessageContent,
+  hasRichContent,
+  type MessagePart,
+} from "@/lib/rich-messages"
+import {
+  AIRichContent,
+  type RichContent,
+  type ButtonAction,
+  type RichContentCallbacks,
+} from "@workspace/ui/components/ai/rich-content"
 
 const formSchema = z.object({
   message: z
@@ -201,7 +212,9 @@ const AttachmentPreview = ({
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
           <DialogHeader>
-            <DialogTitle className="truncate pr-8">{attachment.filename}</DialogTitle>
+            <DialogTitle className="truncate pr-8">
+              {attachment.filename}
+            </DialogTitle>
           </DialogHeader>
           {isImage ? (
             <div className="flex items-center justify-center">
@@ -376,13 +389,14 @@ export const WidgetChatScreen = () => {
   const {
     attachments,
     isUploading,
-    uploadedAttachmentIds,
+    hasPendingFiles,
     clearAttachments,
     openFilePicker,
     handleFileChange,
     fileInputRef,
     acceptedTypes,
     removeAttachment,
+    uploadPending,
   } = useFileUpload({
     organizationId: organizationId || "",
     conversationId,
@@ -398,13 +412,9 @@ export const WidgetChatScreen = () => {
     async (values: z.infer<typeof formSchema>) => {
       if (!conversation || !contactSessionId) return
 
-      // Get attachment IDs before clearing
-      const attachmentIdsToSend = [...uploadedAttachmentIds]
-
       // Stop speech recognition when sending
       stopListening()
       clearTranscript()
-      clearAttachments()
 
       const messageId = `temp-${Date.now()}`
       setSendingMessages((prev) => new Set(prev).add(messageId))
@@ -413,6 +423,12 @@ export const WidgetChatScreen = () => {
       setShowSuggestions(false)
 
       try {
+        // Upload pending attachments first
+        const attachmentIdsToSend = await uploadPending()
+        
+        // Clear attachments after successful upload
+        clearAttachments()
+
         await createMessage({
           threadId: conversation.threadId,
           prompt: values.message,
@@ -444,7 +460,7 @@ export const WidgetChatScreen = () => {
       stopListening,
       clearTranscript,
       clearAttachments,
-      uploadedAttachmentIds,
+      uploadPending,
     ],
   )
 
@@ -466,6 +482,51 @@ export const WidgetChatScreen = () => {
   const copyToClipboard = useCallback((text: string) => {
     navigator.clipboard.writeText(text)
   }, [])
+
+  // Rich content interaction handlers
+  const richContentCallbacks: RichContentCallbacks = useMemo(
+    () => ({
+      onButtonClick: (action: ButtonAction) => {
+        if (action.type === "reply") {
+          // Set the reply text in the form and submit
+          form.setValue("message", action.text, {
+            shouldDirty: true,
+            shouldTouch: true,
+            shouldValidate: true,
+          })
+          form.handleSubmit(onSubmit)()
+        } else if (action.type === "url") {
+          // Open URL in new tab or same window
+          window.open(action.url, action.openInNewTab ? "_blank" : "_self")
+        } else if (action.type === "callback") {
+          // Handle callback - could be extended to trigger specific actions
+          console.log("Callback triggered:", action.callbackId, action.data)
+        }
+      },
+      onFormSubmit: (callbackId: string, data: Record<string, string>) => {
+        // Send form data as a formatted message
+        const formattedData = Object.entries(data)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join("\n")
+        form.setValue("message", formattedData, {
+          shouldDirty: true,
+          shouldTouch: true,
+          shouldValidate: true,
+        })
+        form.handleSubmit(onSubmit)()
+      },
+      onRatingSubmit: (callbackId: string, rating: number) => {
+        // Send rating as a message
+        form.setValue("message", `Rating: ${rating}`, {
+          shouldDirty: true,
+          shouldTouch: true,
+          shouldValidate: true,
+        })
+        form.handleSubmit(onSubmit)()
+      },
+    }),
+    [form, onSubmit],
+  )
 
   const uiMessages = toUIMessages(messages.results ?? [])
   const isLoading = messages.status === "LoadingFirstPage"
@@ -651,11 +712,32 @@ export const WidgetChatScreen = () => {
                       </div>
                     )}
 
-                    {/* Message content with Markdown */}
+                    {/* Message content with Markdown and Rich Content */}
                     {message.text && message.status !== "pending" && (
                       <div className="flex flex-col gap-1">
                         <AIMessageContent>
-                          <AIResponse>{message.text}</AIResponse>
+                          {hasRichContent(message.text) ? (
+                            // Parse and render rich content
+                            <div className="space-y-3">
+                              {parseMessageContent(message.text).map(
+                                (part, partIndex) =>
+                                  part.isRich ? (
+                                    <AIRichContent
+                                      key={partIndex}
+                                      data={part.content as RichContent}
+                                      callbacks={richContentCallbacks}
+                                    />
+                                  ) : (
+                                    <AIResponse key={partIndex}>
+                                      {part.content as string}
+                                    </AIResponse>
+                                  ),
+                              )}
+                            </div>
+                          ) : (
+                            // Regular text message with markdown
+                            <AIResponse>{message.text}</AIResponse>
+                          )}
                         </AIMessageContent>
                         {/* Status indicator for user messages */}
                         {message.role === "user" && (

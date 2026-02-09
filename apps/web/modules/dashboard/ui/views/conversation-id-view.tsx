@@ -391,13 +391,14 @@ export const ConversationIdView = ({
   const {
     attachments,
     isUploading,
-    uploadedAttachmentIds,
+    hasPendingFiles,
     clearAttachments,
     openFilePicker,
     handleFileChange,
     fileInputRef,
     acceptedTypes,
     removeAttachment,
+    uploadPending,
   } = useFileUpload({
     conversationId,
     onError: (error) => {
@@ -606,10 +607,6 @@ export const ConversationIdView = ({
     stopListening()
     clearTranscript()
 
-    // Get attachment IDs before clearing
-    const attachmentIdsToSend = [...uploadedAttachmentIds]
-    clearAttachments()
-
     // Stop typing indicator
     if (lastTypingStateRef.current && conversationId) {
       lastTypingStateRef.current = false
@@ -621,6 +618,12 @@ export const ConversationIdView = ({
     }
 
     try {
+      // Upload pending attachments first
+      const attachmentIdsToSend = await uploadPending()
+
+      // Clear attachments after successful upload
+      clearAttachments()
+
       await createMessage({
         conversationId,
         prompt: values.message,

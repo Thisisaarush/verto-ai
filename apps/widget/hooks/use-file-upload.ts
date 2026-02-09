@@ -170,7 +170,7 @@ export function useFileUpload({
     }
   }, [conversationId, organizationId, contactSessionId, generateUploadUrl, completeUpload, onError])
 
-  const addFiles = useCallback(async (files: FileList | File[]) => {
+  const addFiles = useCallback((files: FileList | File[]) => {
     const fileArray = Array.from(files)
     const currentCount = attachments.length
     
@@ -199,16 +199,35 @@ export function useFileUpload({
     }
 
     setAttachments(prev => [...prev, ...newAttachments])
+  }, [attachments.length, maxFiles, validateFile, onError])
 
-    // Upload valid files
+  // Upload all pending attachments (called on submit)
+  const uploadPending = useCallback(async (): Promise<Id<"attachments">[]> => {
+    const pendingAttachments = attachments.filter(a => a.status === "pending")
+    if (pendingAttachments.length === 0) {
+      // Return already uploaded IDs
+      return attachments
+        .filter(a => a.status === "uploaded" && a.attachmentId)
+        .map(a => a.attachmentId!)
+    }
+
     setIsUploading(true)
     try {
-      const validAttachments = newAttachments.filter(a => a.status === "pending")
-      await Promise.all(validAttachments.map(uploadFile))
+      const results = await Promise.all(pendingAttachments.map(uploadFile))
+      const uploadedIds = results
+        .filter(r => r.status === "uploaded" && r.attachmentId)
+        .map(r => r.attachmentId!)
+      
+      // Also include previously uploaded IDs
+      const previouslyUploadedIds = attachments
+        .filter(a => a.status === "uploaded" && a.attachmentId && !pendingAttachments.some(p => p.id === a.id))
+        .map(a => a.attachmentId!)
+      
+      return [...previouslyUploadedIds, ...uploadedIds]
     } finally {
       setIsUploading(false)
     }
-  }, [attachments.length, maxFiles, validateFile, uploadFile, onError])
+  }, [attachments, uploadFile])
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments(prev => prev.filter(a => a.id !== id))
@@ -231,6 +250,9 @@ export function useFileUpload({
     e.target.value = ""
   }, [addFiles])
 
+  // Check if there are pending files to upload
+  const hasPendingFiles = attachments.some(a => a.status === "pending")
+
   // Get uploaded attachment IDs for including in message
   const uploadedAttachmentIds = attachments
     .filter(a => a.status === "uploaded" && a.attachmentId)
@@ -245,7 +267,9 @@ export function useFileUpload({
     attachments,
     isUploading,
     uploadedAttachmentIds,
+    hasPendingFiles,
     addFiles,
+    uploadPending,
     removeAttachment,
     clearAttachments,
     openFilePicker,
