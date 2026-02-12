@@ -44,6 +44,35 @@ export const create = mutation({
 
     const now = Date.now()
     const expiresAt = now + SESSION_DURATION_MS
+
+    // Reuse an existing session for the same organization + email so
+    // returning widget users can access their previous conversations.
+    if (args.organizationId && sanitizedEmail) {
+      const existingSessions = await ctx.db
+        .query("contactSessions")
+        .withIndex("by_organization_id", (q) =>
+          q.eq("organizationId", args.organizationId),
+        )
+        .order("desc")
+        .collect()
+
+      const existingSession = existingSessions.find(
+        (session) =>
+          session.email?.toLowerCase() === sanitizedEmail.toLowerCase(),
+      )
+
+      if (existingSession) {
+        await ctx.db.patch(existingSession._id, {
+          name: sanitizedName,
+          email: sanitizedEmail,
+          expiresAt,
+          metadata: args.metadata,
+        })
+
+        return existingSession._id
+      }
+    }
+
     const contactSessionId = await ctx.db.insert("contactSessions", {
       name: sanitizedName,
       email: sanitizedEmail,

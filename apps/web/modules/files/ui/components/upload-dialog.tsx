@@ -9,7 +9,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@workspace/ui/components/dialog"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -133,7 +132,6 @@ export const UploadDialog = ({
             maxFiles={1}
             onDrop={handleFileDrop}
             src={uploadedFiles}
-            
           >
             <DropzoneEmptyState />
             <DropzoneContent />
