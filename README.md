@@ -10,16 +10,25 @@ Built for SaaS products, e-commerce stores, and service businesses.
 
 ## 🚀 Features
 
-- AI-powered chat using Google Gemini
-- Knowledge base ingestion (documents → embeddings)
-- Context-aware conversations
-- Automatic human escalation
+- AI-powered chat (default google gemini)
+- Bring your own API Key (ChatGPT, Claude)
+- Knowledge base ingestion (web scraping, documents)
+- Context-aware conversations (RAG)
+- Automatic human escalation (Convex Agent)
 - Embeddable website chat widget
-- Organization-based multi-tenancy
-- Admin dashboard for managing conversations
+- Organization-based multi-tenancy (Clerk)
+- Admin dashboard for managing conversations, knowledge base, etc.
 - Customizable widget appearance
-- Script-based integration
-- Session persistence
+- Session persistence (Convex DB)
+- File Upload (Convex File Storage)
+- Real-Time Typing Indicators
+- Conversation Analytics Dashboard
+
+## Future Scope
+
+- Voice & Video Chat Integration: Enable real-time voice and video support in the widget.
+- AI Agent Training UI: Visual interface for admins to train and fine-tune AI responses.
+- Advanced Analytics: Deeper insights with custom reports and predictive analytics.
 
 ---
 
